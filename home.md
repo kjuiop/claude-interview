@@ -21,9 +21,21 @@ tags: [home, index]
 
 ## 기술 지식 베이스
 
-### Backend
-- [[topics/golang/concepts]] / [[topics/golang/questions]]
-- [[topics/java-kotlin/concepts]] / [[topics/java-kotlin/questions]]
+### Backend — Go
+- [[topics/golang/overview]] — 언어 특징, 버전 변경사항
+- [[topics/golang/goroutine]] — Goroutine, 스케줄러, Leak
+- [[topics/golang/channel]] — Channel, Select
+- [[topics/golang/context]] — Context, 취소 전파
+- [[topics/golang/concurrency]] — Mutex vs Channel, 채팅 서버 사례
+- [[topics/golang/interface]] — 암시적 구현, Duck typing
+- [[topics/golang/memory]] — GC, Escape Analysis
+- [[topics/golang/error-handling]] — 에러 핸들링 패턴
+- [[topics/golang/map]] — Map 내부 구조, nil map, concurrent map
+- [[topics/golang/lint]] — golangci-lint
+
+### Backend — Java / Kotlin
+- [[topics/java/concepts]] / [[topics/java/questions]]
+- [[topics/kotlin/concepts]] / [[topics/kotlin/questions]]
 - [[topics/python-fastapi/concepts]] / [[topics/python-fastapi/questions]]
 
 ### Database
@@ -34,7 +46,8 @@ tags: [home, index]
 - [[topics/elasticsearch/concepts]] / [[topics/elasticsearch/questions]]
 
 ### Messaging & Coordination
-- [[topics/kafka-rabbitmq/concepts]] / [[topics/kafka-rabbitmq/questions]]
+- [[topics/kafka/concepts]] / [[topics/kafka/questions]]
+- [[topics/rabbitmq/concepts]] / [[topics/rabbitmq/questions]]
 - [[topics/zookeeper/concepts]] / [[topics/zookeeper/questions]]
 
 ### Infrastructure

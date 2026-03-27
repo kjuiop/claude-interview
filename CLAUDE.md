@@ -34,9 +34,10 @@
 ### Step 1 — 로컬 Knowledge Graph 조회 (항상 먼저)
 다음 파일들을 병렬로 읽는다:
 1. `resume/profile.md` — 지원자 기술 스택 및 경험
-2. `topics/{관련기술}/concepts.md` — 기존에 정리된 개념
-3. `topics/{관련기술}/questions.md` — 기존에 쌓인 질문들
-4. 면접 세션인 경우 `jobs/{회사}/job.md` — 공고 요구사항
+2. `topics/{관련기술}/` — 기존에 정리된 개념 및 질문
+   - golang: 주제별 파일 (`goroutine.md`, `channel.md` 등) — `concepts.md` 없음
+   - 그 외: `concepts.md` + `questions.md`
+3. 면접 세션인 경우 `jobs/{회사}/job.md` — 공고 요구사항
 
 → 이미 정리된 내용은 중복 생성하지 않고 기존 내용 위에 쌓는다.
 
@@ -114,13 +115,28 @@ related: [연관기술1, 연관기술2]
 새 topics가 추가되거나 job이 등록될 때마다 `home.md`의 해당 섹션에 링크 추가
 
 ### 기술 폴더 목록
-- golang: Go 언어, goroutine, channel, interface, GC
-- java-kotlin: Java/Kotlin, Spring Boot, JPA, 동시성
+
+**golang/** — 주제별 파일로 분리 (concepts.md/questions.md 없음)
+- `overview.md` — Go 언어 특징, 버전 변경사항
+- `goroutine.md` — Goroutine, 스케줄러, Goroutine Leak
+- `channel.md` — Channel, Select
+- `context.md` — Context, 취소 전파
+- `concurrency.md` — Mutex vs Channel, 동시성 패턴
+- `interface.md` — 암시적 구현, Duck typing
+- `memory.md` — GC, Escape Analysis
+- `error-handling.md` — 에러 핸들링 패턴
+- `map.md` — Map 내부 구조, nil map, concurrent map
+- `lint.md` — golangci-lint
+
+**그 외 폴더** — `concepts.md` + `questions.md` 구조
+- java: Java, JVM, Spring Boot, JPA, 동시성
+- kotlin: Kotlin, Coroutines, Null Safety
 - mysql: 인덱스, 실행 계획, 트랜잭션, 복제
 - postgresql: MVCC, MySQL과의 차이, 고급 기능
 - redis: 자료구조, 캐싱 전략, 분산락, pub/sub
 - mongodb: 도큐먼트 모델, 인덱스, 집계 파이프라인
-- kafka-rabbitmq: 메시징 패턴, 파티션, 컨슈머 그룹, 재처리
+- kafka: 메시징 패턴, 파티션, 컨슈머 그룹, 재처리
+- rabbitmq: AMQP, Exchange 타입, Dead Letter Queue
 - zookeeper: 분산 코디네이션, 노드 구조, Watch 이벤트
 - kubernetes: 아키텍처, 배포 전략, HPA, 장애 대응
 - distributed-systems: CAP 정리, 일관성 모델, 분산 트랜잭션
