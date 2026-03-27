@@ -42,6 +42,38 @@ related: [distributed-systems, kubernetes]
 - 탐지: `runtime.NumGoroutine()` 모니터링, `uber-go/goleak` 테스트
 - 참고: [[topics/golang/concepts#Goroutine Leak (면접 단골)]]
 
+**모범 답변 (상세):**
+
+> goroutine leak은 생성된 goroutine이 종료되지 않고 메모리를 계속 점유하는 현상입니다.
+>
+> 발생 원인은 크게 세 가지입니다.
+> 첫째, **아무도 읽지 않는 channel에 전송하는 경우**입니다. unbuffered channel에 데이터를 보내는 goroutine은 수신자가 나타날 때까지 영원히 블로킹됩니다.
+> 둘째, **종료 신호 없는 무한 루프**입니다. `for {}` 로 반복하는 goroutine에 멈추라는 신호를 주지 않으면 프로그램이 살아있는 한 계속 동작합니다.
+> 셋째, **context 미전파**입니다. 부모 context가 취소됐는데 자식 goroutine이 해당 context를 받지 않으면 취소 신호가 전달되지 않습니다.
+>
+> 방지 방법은 goroutine을 생성할 때 반드시 종료 시점을 설계하는 것입니다. context.Context를 파라미터로 받아, for 루프 안의 select 문에서 ctx.Done()을 수신하도록 합니다. 실무에서는 HTTP 요청 goroutine의 경우 클라이언트 연결이 끊기면 r.Context()가 자동으로 취소되고, 이 context를 하위 goroutine까지 전파하면 연쇄적으로 정리됩니다.
+>
+> ```go
+> func worker(ctx context.Context, ch <-chan Message) {
+>     for {
+>         select {
+>         case msg := <-ch:
+>             process(msg)
+>         case <-ctx.Done():
+>             return  // 취소 신호 수신 → 종료
+>         }
+>     }
+> }
+> ```
+>
+> 탐지 방법은 두 가지입니다. 테스트 단계에서는 `uber-go/goleak` 라이브러리를 사용합니다. `defer goleak.VerifyNone(t)` 한 줄로 테스트 종료 시점에 남은 goroutine이 있으면 실패시켜 CI에서 사전 차단할 수 있습니다. 운영 단계에서는 `runtime.NumGoroutine()` 을 Prometheus 메트릭으로 노출하고 Grafana 대시보드에서 goroutine 수가 선형으로 증가하는 패턴을 감지합니다. 메모리 사용량 증가와 함께 나타나면 leak을 강하게 의심할 수 있습니다.
+
+**꼬리 질문: goroutine leak을 테스트에서 검증하는 방법과, 운영 중 의심할 수 있는 징후는?**
+- 테스트: `uber-go/goleak` — `defer goleak.VerifyNone(t)` 로 테스트 종료 시 잔존 goroutine 감지
+- 운영 징후: Grafana에서 메모리 사용량 선형 증가 + goroutine 수(`go_goroutines`) 지속 증가
+- 추가 징후: GC가 자주 돌아도 메모리가 회수되지 않는 패턴, 응답 지연 점진적 증가
+- 참고: [[topics/golang/concepts#Goroutine Leak (면접 단골)]]
+
 ---
 
 **Q. Context를 왜 사용하고, 어떻게 올바르게 전달하나요?**

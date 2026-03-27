@@ -57,7 +57,18 @@ func worker(ctx context.Context) {
 }
 ```
 
-**탐지:** `runtime.NumGoroutine()` 모니터링, `uber-go/goleak` 테스트 라이브러리
+**탐지:**
+```go
+// 1. 테스트: uber-go/goleak
+func TestWorker(t *testing.T) {
+    defer goleak.VerifyNone(t)  // 테스트 종료 시 남은 goroutine 있으면 실패
+    // 테스트 코드
+}
+
+// 2. 운영: goroutine 수를 메트릭으로 노출
+runtime.NumGoroutine()  // 현재 살아있는 goroutine 수
+// Prometheus go_goroutines 메트릭 → Grafana 대시보드에서 선형 증가 감지
+```
 
 ---
 
