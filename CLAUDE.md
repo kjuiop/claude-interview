@@ -1,5 +1,19 @@
 # Claude Interview Prep
 
+## Harness Layer (항상 먼저 읽을 것)
+
+모든 세션 시작 시 아래 3개 파일을 **병렬로** 읽는다:
+1. `_harness/status.md` — 현재 준비 수준, 취약 기술, 우선순위
+2. `_harness/constraints.md` — 파일 형식 규칙 (파일 생성 전 체크)
+3. `_harness/entropy.md` — 채워야 할 gaps, 처리할 불일치
+
+세션 종료 시:
+- `_harness/status.md` 기술 수준 업데이트
+- 발견된 문제는 `_harness/entropy.md`에 기록
+- 새 개념/질문은 즉시 해당 `topics/` 파일에 반영
+
+---
+
 ## 프로젝트 목적
 개발자의 취업 면접 대비를 돕는 Claude Code 기반 프로젝트.
 공고 링크를 받으면 `jobs/` 폴더에 공고별 디렉토리를 만들고, 지원자 프로필과 비교해 맞춤형 면접 준비를 진행한다.

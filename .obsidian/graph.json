@@ -9,11 +9,17 @@
   "colorGroups": [
     {
       "query": "tag:#interview-questions",
-      "color": { "a": 1, "rgb": 16711680 }
+      "color": {
+        "a": 1,
+        "rgb": 16711680
+      }
     },
     {
       "query": "tag:#home",
-      "color": { "a": 1, "rgb": 16750848 }
+      "color": {
+        "a": 1,
+        "rgb": 16750848
+      }
     }
   ],
   "collapse-display": false,
@@ -26,6 +32,6 @@
   "repelStrength": 10,
   "linkStrength": 1,
   "linkDistance": 250,
-  "scale": 1,
+  "scale": 0.9738555095036903,
   "close": false
 }

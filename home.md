@@ -9,6 +9,11 @@ tags: [home, index]
 
 ---
 
+## Harness Layer
+- [[_harness/status]] — 현재 준비 수준, 취약 기술, 우선순위
+- [[_harness/constraints]] — 아키텍처 제약, 파일 형식 규칙
+- [[_harness/entropy]] — 채워야 할 gaps, 불일치 추적
+
 ## 지원자 프로필
 - [[resume/profile]] — 기술 스택, 대표 성과, 경력
 
@@ -32,6 +37,9 @@ tags: [home, index]
 - [[topics/golang/error-handling]] — 에러 핸들링 패턴
 - [[topics/golang/map]] — Map 내부 구조, nil map, concurrent map
 - [[topics/golang/lint]] — golangci-lint
+- [[topics/golang/clean-architecture]] — Clean Architecture, 레이어 구조, 프로젝트 구조
+- [[topics/golang/hexagonal-architecture]] — Hexagonal (Ports & Adapters), Clean Architecture 비교
+- [[topics/golang/ddd-modular-monolith]] — DDD Bounded Context, Modular Monolith, 도메인 간 Port/Adapter
 
 ### Backend — Java / Kotlin
 - [[topics/java/concepts]] / [[topics/java/questions]]
