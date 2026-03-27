@@ -26,11 +26,42 @@
 - 세션 기록은 `jobs/{회사}/sessions/YYYY-MM-DD-{주제}.md` 에 저장
 - 진행 방식: 질문 → 답변 → 꼬리 질문 → 피드백
 
-## 면접 질문 생성 원칙
-1. **웹 검색 우선**: 최신 기술 트렌드, 해당 회사 관련 정보, 실무 면접 패턴 검색
-2. **이력서 연계**: 지원자의 실제 경험과 연결된 심화 질문 포함
-3. **공고 스택 우선순위**: job.md의 기술 스택 기준으로 질문 비중 조정
-4. **난이도 구분**: 기초 확인 → 경험 기반 심화 → 구조 설계 순서
+## 지식 검색 프로토콜 (Knowledge Retrieval Protocol)
+
+면접 질문 생성, 기술 정리, 면접 세션 진행 시 반드시 아래 순서로 실행한다.
+이것이 로컬 Knowledge Graph + 웹 검색을 조합하는 Harness Engineering 워크플로우다.
+
+### Step 1 — 로컬 Knowledge Graph 조회 (항상 먼저)
+다음 파일들을 병렬로 읽는다:
+1. `resume/profile.md` — 지원자 기술 스택 및 경험
+2. `topics/{관련기술}/concepts.md` — 기존에 정리된 개념
+3. `topics/{관련기술}/questions.md` — 기존에 쌓인 질문들
+4. 면접 세션인 경우 `jobs/{회사}/job.md` — 공고 요구사항
+
+→ 이미 정리된 내용은 중복 생성하지 않고 기존 내용 위에 쌓는다.
+
+### Step 2 — 웹 검색으로 최신 정보 보강 (항상 실행)
+로컬 파일을 읽은 후 반드시 WebSearch로 아래를 검색한다:
+- `{기술명} 백엔드 개발자 면접 질문 {연도}` — 최신 면접 트렌드
+- `{기술명} best practices {연도}` — 최신 실무 관행
+- 면접 세션인 경우 `{회사명} 기술 스택 개발 문화` — 회사 특화 정보
+
+→ 로컬에 없는 새로운 내용만 추가한다.
+
+### Step 3 — 통합 및 생성
+로컬 지식 + 웹 검색 결과를 조합해서:
+- 지원자 경험과 연결된 질문 우선 생성
+- 공고 기술 스택 기준으로 비중 조정
+- 난이도 순: 기초 확인 → 경험 기반 심화 → 구조 설계
+
+### Step 4 — Feedback Loop (세션/정리 후 항상 실행)
+세션이나 기술 정리가 끝난 후:
+1. 새로 발견된 개념/질문을 `topics/{기술}/` 파일에 추가
+2. 새 wikilink 연결이 생겼으면 `home.md` 업데이트
+3. 세션 기록은 `jobs/{회사}/sessions/YYYY-MM-DD-{주제}.md`에 저장
+4. `daily/YYYY-MM-DD.md` 의 각 Q&A 피드백 하단에 관련 `topics/` 파일 wikilink 추가
+   - 형식: `- 관련 개념 상세: [[topics/{기술}/questions#{섹션}]] | [[topics/{기술}/concepts#{섹션}]]`
+   - 목적: daily 기록에서 개념 상세 페이지로 바로 이동 가능하게 연결
 
 ---
 
@@ -53,6 +84,34 @@
 - 기존 내용이 있으면 **덮어쓰지 않고 추가(append)**
 - 중복 항목은 병합
 - 출처가 있는 경우 하단에 참고 링크 기재
+
+### Obsidian Knowledge Graph 규칙
+이 프로젝트는 Obsidian Vault로 열어 Knowledge Graph로 탐색할 수 있다.
+파일 작성/수정 시 반드시 아래 규칙을 따른다.
+
+**1. YAML frontmatter 필수**
+모든 topics 파일 최상단에 아래 형식으로 작성:
+```yaml
+---
+tags: [기술명, 카테고리]
+related: [연관기술1, 연관기술2]
+---
+```
+
+**2. wikilink로 관계 명시**
+- 다른 기술/개념을 언급할 때는 반드시 `[[기술명]]` 형식 사용
+- topics 내 파일 참조: `[[golang/concepts]]`
+- 예: "[[goroutine]]은 [[channel]]과 함께 사용된다"
+
+**3. 링크 방향 기준**
+- concepts.md → 관련 기술, 상위 개념, 연관 개념 링크
+- questions.md → 해당 concepts.md, 관련 질문 파일 링크
+- job.md → 요구하는 기술 topics 링크
+- sessions/ → 해당 세션에서 다룬 topics 링크
+- daily/ → 각 Q&A 피드백에서 관련 topics/concepts, topics/questions 섹션으로 링크
+
+**4. home.md 업데이트**
+새 topics가 추가되거나 job이 등록될 때마다 `home.md`의 해당 섹션에 링크 추가
 
 ### 기술 폴더 목록
 - golang: Go 언어, goroutine, channel, interface, GC

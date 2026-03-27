@@ -1,4 +1,13 @@
+---
+tags: [claude, ai, llm, tools]
+related: [prompt-engineering, mcp, agent]
+---
+
 # Claude — 핵심 개념 정리
+
+→ [[home]] | 질문 모음: [[topics/claude/questions]]
+
+---
 
 ## 1. 모델 종류 (2025 기준)
 
@@ -21,8 +30,8 @@
 ### 주요 기능
 - **Deep Codebase Awareness** — 프로젝트 전체를 인덱싱해 파일 간 연관성 파악
 - **Plan Mode** — 실행 전 단계별 계획을 작성하고 사용자 승인 대기
-- **Subagent** — 특정 작업을 전문화된 서브 에이전트에게 위임
-- **MCP 통합** — 외부 서비스(Slack, DB, GitHub 등)와 연결
+- **Subagent** — 특정 작업을 전문화된 서브 에이전트에게 위임 → [[#5. Agent / Subagent]]
+- **[[#4. MCP (Model Context Protocol)]] 통합** — 외부 서비스와 연결
 - **Background Agent** — 독립적인 서브 작업을 병렬로 실행
 
 ### CLAUDE.md
@@ -114,7 +123,6 @@ USB-C처럼 AI 앱이 다양한 외부 서비스와 표준화된 방식으로 �
 | 한국어 처리 | 우수 | 보통 |
 | 안전성/윤리 | Constitutional AI 기반 | RLHF 기반 |
 | 멀티모달 | 텍스트 + 이미지 + PDF | 텍스트 + 이미지 + 오디오 + 비디오 |
-| 가격 (Sonnet급) | $3/$15 per 1M tokens | 비슷한 수준 |
 
 ---
 

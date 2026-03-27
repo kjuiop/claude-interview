@@ -6,3 +6,11 @@ jobs
 
 # resume
 resume
+
+# daily interview log (개인 기록)
+daily
+
+# obsidian (개인 설정)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache

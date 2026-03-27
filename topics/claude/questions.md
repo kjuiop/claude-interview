@@ -1,4 +1,13 @@
+---
+tags: [claude, ai, llm, interview-questions]
+related: [prompt-engineering, mcp, agent]
+---
+
 # Claude — 면접 예상 질문
+
+→ [[home]] | 개념 정리: [[topics/claude/concepts]]
+
+---
 
 ## 기초 개념
 
@@ -14,40 +23,41 @@
 - Haiku: 빠른 응답이 필요한 단순 작업 (요약, 분류, 추출)
 - Sonnet: 대부분의 실무 작업 — 기본값
 - Opus: 복잡한 추론, 멀티스텝 에이전트, 정확도가 중요한 작업
-- 모르면 Sonnet으로 시작해서 성능/비용 보고 조정
 
 ---
 
-**Q. Context Window가 크면 어떤 이점이 있나요?**
-- 대규모 코드베이스 전체를 한 번에 분석 가능
-- 긴 문서, 대화 히스토리를 잘라내지 않고 처리
-- 단점: 토큰이 많아질수록 응답 속도 저하, 비용 증가
-- "Lost in the middle" 문제: 긴 컨텍스트 중간부 정보를 잘 못 찾는 경향 → 중요 정보는 앞/뒤에 배치
+**Q. Context Window가 크면 어떤 이점과 단점이 있나요?**
+- 이점: 대규모 코드베이스 전체를 한 번에 분석, 긴 대화 히스토리 유지
+- 단점: 응답 속도 저하, 비용 증가
+- "Lost in the middle" 문제: 긴 컨텍스트 중간부 정보를 잘 못 찾는 경향 → 중요 정보는 앞/뒤 배치
+- 관련 개념: [[topics/claude/concepts#3. Claude API]]
 
 ---
 
 ## Claude Code
 
 **Q. CLAUDE.md 파일은 왜 사용하나요?**
-- Claude Code가 세션 시작 시 자동 로드 → 매번 설명할 필요 없이 컨텍스트 유지
-- 프로젝트 기술 스택, 코딩 규칙, 디렉토리 구조, 주요 명령어를 담아두면 일관된 동작
-- 전역(`~/.claude/CLAUDE.md`)과 프로젝트별로 나누어 관리 가능
+- Claude Code가 세션 시작 시 자동 로드 → 매번 설명 없이 컨텍스트 유지
+- 프로젝트 기술 스택, 코딩 규칙, 디렉토리 구조 담아두면 일관된 동작
+- 전역(`~/.claude/CLAUDE.md`)과 프로젝트별로 나눠 관리 가능
+- 참고: [[topics/claude/concepts#CLAUDE.md]]
 
 ---
 
 **Q. Subagent를 언제 사용하나요?**
 - 독립적인 리서치/탐색 작업 → 메인 컨텍스트를 오염시키지 않으려 할 때
-- 병렬로 처리할 수 있는 독립적인 여러 작업이 있을 때
-- 특정 도구만 허용된 제한적인 환경에서 작업할 때
-- Foreground: 결과가 다음 단계에 필요한 경우 / Background: 완전히 독립적인 작업
+- 병렬로 처리할 수 있는 독립적인 작업이 여러 개일 때
+- Foreground: 결과가 다음 단계에 필요 / Background: 완전히 독립적인 작업
+- 참고: [[topics/claude/concepts#5. Agent / Subagent]]
 
 ---
 
 **Q. MCP(Model Context Protocol)란 무엇이고 어떻게 활용하나요?**
 - AI 앱이 외부 서비스와 표준 방식으로 연결하는 오픈 프로토콜
 - Tools(액션), Resources(데이터), Prompts(템플릿) 세 요소로 구성
-- 활용: Slack 자동화, DB 쿼리, GitHub 연동, 웹 검색 등
-- 비유: AI를 위한 USB-C — 어떤 서비스든 표준 방식으로 꽂아서 사용
+- 활용: Slack 자동화, DB 쿼리, GitHub 연동, 웹 검색
+- 비유: AI를 위한 USB-C
+- 참고: [[topics/claude/concepts#4. MCP (Model Context Protocol)]]
 
 ---
 
@@ -59,13 +69,6 @@
 - 긴 문서는 앞에, 질문은 뒤에 배치 (Lost in the middle 방지)
 - 구체적인 제약 조건 명시: "300자 이내로", "JSON 형식으로"
 - Few-shot: 원하는 출력 형식 예시 2~3개 제공
-
----
-
-**Q. Prompt Chaining은 언제 사용하나요?**
-- 복잡한 작업을 한 번에 처리하면 품질이 낮아질 때
-- 이전 단계 출력이 다음 단계 입력이 되는 파이프라인 구조
-- 예: 문서 분석 → 핵심 추출 → 요약 → 포맷팅
 
 ---
 
