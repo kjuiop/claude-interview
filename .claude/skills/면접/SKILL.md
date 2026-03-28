@@ -8,9 +8,16 @@ argument-hint: "[선택: 특정 주제 또는 회사명]"
 
 ## Step 1 — 오늘의 질문 불러오기
 
-`$ARGUMENTS`가 있으면:
-- 특정 주제: `topics/{$ARGUMENTS}/questions.md` 에서 질문 선택
-- 회사명: `jobs/{$ARGUMENTS}/job.md` 의 기술 스택 기반으로 질문 선택
+`$ARGUMENTS`가 있으면 아래 순서로 소스를 찾는다:
+
+1. **회사명 매핑**: `jobs/` 하위에 `$ARGUMENTS`와 이름이 유사한 폴더가 있으면 → `jobs/{폴더}/job.md` 읽고 기술 스택 기반으로 질문 선택
+2. **topics 직접 매핑**: `topics/$ARGUMENTS/questions.md` 파일이 있으면 → 해당 파일에서 질문 선택
+3. **golang 하위 파일 매핑**: `topics/golang/$ARGUMENTS.md` 파일이 있으면 (gin, goroutine, channel 등) → 해당 파일의 `## 면접 질문` 섹션에서 질문 선택
+4. **키워드 검색**: 위 경로가 없으면 `$ARGUMENTS` 키워드를 포함한 topics 파일을 검색해 가장 관련 높은 파일에서 질문 선택
+5. 소스를 찾지 못하면 어떤 주제인지 사용자에게 확인 후 중단
+
+소스 파일을 찾은 뒤 질문이 여러 개면 **난이도 순(기초→중급→심화)으로 3개** 선택.
+질문이 3개 미만이면 있는 만큼만 진행.
 
 `$ARGUMENTS`가 없으면:
 - 오늘 날짜의 `daily/YYYY-MM-DD.md` 파일을 읽어 오늘의 질문 3개 사용

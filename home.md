@@ -40,6 +40,7 @@ tags: [home, index]
 - [[topics/golang/clean-architecture]] — Clean Architecture, 레이어 구조, 프로젝트 구조
 - [[topics/golang/hexagonal-architecture]] — Hexagonal (Ports & Adapters), Clean Architecture 비교
 - [[topics/golang/ddd-modular-monolith]] — DDD Bounded Context, Modular Monolith, 도메인 간 Port/Adapter
+- [[topics/golang/gin]] — Gin Middleware, HandlersChain, c.Next()/c.Abort(), 요청 흐름
 
 ### Backend — Java / Kotlin
 - [[topics/java/concepts]] / [[topics/java/questions]]

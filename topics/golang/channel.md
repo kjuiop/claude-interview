@@ -47,9 +47,14 @@ case <-ctx.Done():
 ## 면접 질문
 
 **Q. unbuffered channel과 buffered channel의 차이와 선택 기준은?**
-- unbuffered: 송수신이 동시에 준비돼야 함 → 강한 동기화, goroutine 간 핸드셰이크
-- buffered: 버퍼 가득 찰 때까지 non-blocking → 느슨한 결합, 일시적 burst 처리
-- 선택: 동기화가 목적이면 unbuffered, throughput이 목적이면 buffered
+- unbuffered: **송수신 양쪽 모두 블로킹** — 상대방이 준비될 때까지 둘 다 기다림. 강한 동기화, goroutine 간 핸드셰이크
+- buffered: 버퍼 가득 찰 때까지 non-blocking → **버퍼가 꽉 차면 sender 블로킹** (drop이 아님!)
+- ⚠️ **오개념 주의**: "버퍼 가득 차면 drop" — 틀림. 블로킹됨. Drop하려면 `select + default` 명시 필요
+- 선택: 동기화가 목적이면 unbuffered, throughput/decoupling이 목적이면 buffered
+
+**면접 세션 피드백 (2026-03-28)**:
+- 오개념: "버퍼 가득 차면 drop" → 실제로는 sender 블로킹
+- 이력서 연결: 채팅 서버에서 select+default로 drop 처리한 경험과 연결할 것
 
 ---
 
