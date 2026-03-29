@@ -188,3 +188,68 @@ if err == redis.TxFailedErr {
 > - https://redis.uptrace.dev/guide/go-redis-pipelines.html
 > - https://dgle.dev/redis-multi-lua/
 > - https://redis.io/docs/latest/develop/using-commands/transactions/
+
+---
+
+## Redis Streams vs Pub/Sub
+
+### 핵심 차이
+
+| | Pub/Sub | Streams |
+|---|---|---|
+| 메시지 저장 | 없음 (전달 즉시 사라짐) | **Append-only log** (영속) |
+| 전달 보장 | at-most-once (손실 가능) | at-least-once + ACK |
+| 구독자 부재 시 | 메시지 **유실** | 메시지 **보존** |
+| 재처리(Replay) | 불가 | 가능 (특정 ID부터 재읽기) |
+| Consumer Group | 없음 | 있음 (작업 분산 + 중복 방지) |
+| 사용 시나리오 | 실시간 브로드캐스트, 손실 허용 | 결제·주문 등 손실 불허 |
+
+### Pub/Sub 사용 시나리오
+- 라이브 채팅, 실시간 알림, 게임 상태 동기화
+- 메시지 손실 허용, 극도로 낮은 레이턴시 필요
+
+```bash
+PUBLISH chat:room1 "hello"
+SUBSCRIBE chat:room1
+```
+
+### Redis Streams 핵심 명령어
+
+```bash
+# 메시지 발행 (ID 자동 생성: timestamp-sequence)
+XADD events * user_id 123 action "purchase"
+# → "1709020800000-0"
+
+# Consumer Group 생성
+XGROUP CREATE events payment-group $ MKSTREAM
+# $: 새 메시지부터 / 0: 처음부터
+
+# Consumer가 읽기 (>: 아직 미처리 메시지만)
+XREADGROUP GROUP payment-group worker-1 COUNT 5 STREAMS events >
+
+# 처리 완료 후 ACK
+XACK events payment-group 1709020800000-0
+
+# Pending 목록 확인 (ACK 안 된 메시지)
+XPENDING events payment-group
+
+# 일정 시간 이상 미처리 메시지 다른 consumer로 이양
+XAUTOCLAIM events payment-group worker-2 60000 0-0 COUNT 100
+```
+
+### Pending Entries List (PEL)
+- `XREADGROUP`으로 읽은 메시지는 자동으로 PEL에 추가됨
+- `XACK` 호출 전까지 PEL에 남아있음
+- Consumer 장애 시 → `XCLAIM`/`XAUTOCLAIM`으로 다른 consumer가 인수인계
+- PEL 미모니터링 시 메모리 누적 주의 → `XPENDING` 정기 확인 필요
+
+### Dead Letter Queue (DLQ) 패턴
+재시도 횟수 초과 메시지를 별도 스트림으로 이동:
+```
+events 스트림 → worker 처리 실패 3회 → events_dlq 스트림으로 이동 → 수동 처리
+```
+
+### Pub/Sub 메시지 유실 보완 전략 (라이브 채팅)
+- 유실 허용 근거: 라이브 채팅은 실시간성 우선
+- 재연결 시 MongoDB에서 최근 N개 메시지 fetch로 보완
+- 유실 불허 시: Redis Streams 또는 Kafka로 전환
