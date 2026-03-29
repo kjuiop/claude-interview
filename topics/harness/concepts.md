@@ -1,3 +1,14 @@
+---
+tags: [harness, knowledge-management, obsidian, ai-workflow]
+related: [knowledge-systems, obsidian]
+---
+
+# Harness Engineering — 참고 자료
+
+→ [[home]] | 관련: [[topics/knowledge-systems/concepts]] | [[topics/obsidian/concepts]]
+
+---
+
 ### 방법론
 
 - [Building a Second Brain — Tiago Forte](https://www.buildingasecondbrain.com/)

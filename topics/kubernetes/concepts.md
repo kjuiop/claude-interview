@@ -1,6 +1,6 @@
 ---
 tags: [kubernetes, k8s, deployment, hpa, devops]
-related: [distributed-systems, golang]
+related: [distributed-systems, golang, networking]
 ---
 
 # Kubernetes 핵심 개념

@@ -49,10 +49,67 @@ related: [rabbitmq, distributed-systems]
 
 ---
 
+## Idempotent Producer
+
+### Q. Kafka Idempotent Producer는 무엇이고, 어떤 한계가 있나요?
+
+**핵심 답변 구조:**
+- 정의: 시퀀스 번호로 브로커에서 중복 메시지 제거
+- 설정: `enable.idempotence=true` + `acks=all`
+- 범위: 단일 프로듀서 세션 내 중복만 제거 (컨슈머 중복은 별개)
+- 한계: PID는 메모리 기반 → **재시작 시 새 PID 발급 → 재시작 전후 구간 중복 가능**
+- 해결: `transactional.id` 고정값 설정 → 재시작 후 동일 PID 복구 + Zombie Fencing
+
+**꼬리 질문 대비:**
+- "재시작 시 왜 중복이 생기나?" → PID 메모리 기반, 재시작 = 새 PID, 브로커는 이전 세션 기억 못함
+- "transactional.id를 설정하면 뭐가 달라지나?" → 브로커가 고정 ID로 PID를 영속적으로 관리, Zombie Fencing 추가
+
+---
+
+## Kafka Transactions
+
+### Q. Kafka Transactions의 동작 흐름과 `sendOffsetsToTransaction()`이 필요한 이유를 설명해주세요.
+
+**핵심 답변 구조:**
+- 정의: 여러 파티션/토픽에 걸친 원자적 쓰기 보장
+- 흐름: `initTransactions() → beginTransaction() → send() → sendOffsetsToTransaction() → commitTransaction()`
+- 컨슈머 설정: `isolation.level=read_committed` + `enable.auto.commit=false`
+
+**`sendOffsetsToTransaction()` 이 필요한 이유:**
+- Consume → Process → Produce 패턴에서 offset commit을 트랜잭션에 포함
+- 없으면: produce 완료 → crash → offset 미commit → 재처리 → 중복 produce
+- 있으면: produce + offset commit이 원자적 완료 → Exactly-Once 보장
+
+**꼬리 질문 대비:**
+- "`abortTransaction()` 후 메시지는?" → 토픽에 기록되나 `read_committed` 컨슈머는 marker로 인해 무시
+- "transactional.id 없이 exactly-once 가능?" → 불가. 재시작 시 PID 재발급으로 멱등성 깨짐
+
+---
+
+## 메시지 순서 보장
+
+### Q. Kafka에서 메시지 순서 보장 조건과 파티션 수 변경 시 발생하는 문제를 설명해주세요.
+
+**핵심 답변 구조:**
+- 조건: 동일 키 → 동일 파티션 → 파티션 내 순서 보장 (파티션 간 순서는 보장 안 됨)
+- 파티션 수 변경 문제: 키 해시 재계산 → 기존 키가 다른 파티션으로 → 전체 순서 깨짐
+- **리밸런싱 중 순서 깨짐**: 기존 파티션 미처리 메시지 + 새 파티션 신규 메시지 → 다른 컨슈머가 처리 → 전체 순서 불가
+- 해결: 미처리 메시지 소진 후 파티션 수 변경 / 처음부터 충분한 파티션 수 설정
+
+**설계 전략:**
+- 완전한 순서 보장: 파티션 1개 + 컨슈머 1개 (처리량 희생)
+- 처리량 필요 시: 파티션 수 = 최대 예상 컨슈머 수 × 2~3배로 초기 설정, 이후 컨슈머로 처리량 조절
+- `max.in.flight.requests.per.connection=1`: 재시도 시 순서 역전 방지
+
+**꼬리 질문 대비:**
+- "파티션 수 변경 도중 미처리 메시지 순서는?" → 기존 P0 미처리 + 신규 P2 메시지 → 다른 컨슈머 처리 → 전체 순서 깨짐
+- "순서 보장하면서 처리량 높이려면?" → 키 설계로 파티션 분산 + 파티션 수 초기에 충분히 설정
+
+---
+
 ## 작성 예정
 
 주요 주제:
 - Kafka의 높은 처리량 비결 (순차 I/O, Zero-copy, 배치)
 - 파티션 수 결정 기준
 - Consumer lag 모니터링 및 대응
-- 메시지 순서 보장 조건

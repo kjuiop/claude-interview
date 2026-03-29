@@ -61,6 +61,7 @@ tags: [home, index]
 
 ### Infrastructure
 - [[topics/kubernetes/concepts]] / [[topics/kubernetes/questions]]
+- [[topics/networking/concepts]] / [[topics/networking/questions]] — HTTP/HTTPS, TLS, 핸드셰이크
 
 ### Architecture
 - [[topics/distributed-systems/concepts]] / [[topics/distributed-systems/questions]]
@@ -70,6 +71,7 @@ tags: [home, index]
 - [[topics/claude/concepts]] / [[topics/claude/questions]]
 - [[topics/obsidian/concepts]] / [[topics/obsidian/questions]]
 - [[topics/knowledge-systems/concepts]] / [[topics/knowledge-systems/questions]]
+- [[topics/harness/concepts]] — Harness Engineering 참고 자료 (방법론, Obsidian+Claude 통합)
 
 ---
 

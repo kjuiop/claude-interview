@@ -1,6 +1,6 @@
 ---
 tags: [system-design, architecture, real-time, backend]
-related: [redis, kafka, kubernetes, golang, distributed-systems]
+related: [redis, kafka, kubernetes, golang, distributed-systems, networking]
 ---
 
 # System Design — 핵심 개념 정리
