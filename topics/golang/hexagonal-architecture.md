@@ -422,6 +422,13 @@ func TestCreateUser_EmailExists(t *testing.T) {
 - Primary Adapter와 Secondary Adapter의 차이는? (방향 — 누가 누구를 호출하느냐)
 - Test를 위한 Mock도 Adapter인가요? (네. Mock Secondary Adapter를 주입해 Core를 격리 테스트)
 
+**면접 세션 피드백 (2026-03-30)**:
+- Port=추상화/Adapter=구현체 구분, 결합도 제거 목적은 정확히 이해
+- Primary/Secondary 방향 구분 미숙 — 구분 기준은 **방향(누가 Core를 호출/구현하느냐)**. 레이어 위치가 아님
+- HTTP Handler = Primary Adapter (Primary Port를 호출하는 구현체)
+- Go 암시적 인터페이스 연결 미언급 — `implements` 없이 메서드 시그니처만 맞으면 Port 자동 충족이 핵심
+- 컴파일 타임 검증: `var _ port.UserRepository = (*PostgresUserRepo)(nil)` 패턴 암기
+
 ---
 
 **Q. Go의 암시적 인터페이스가 Hexagonal Architecture와 왜 잘 맞나요?**

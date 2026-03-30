@@ -32,6 +32,34 @@ related: [kubernetes/concepts]
 - 잘한 점: readinessProbe 실무 설계, HPA CPU 기준 판단 근거, k6 p95/p99 임계치 연결
 - 보완: Rollback(ArgoCD sync), PDB(minAvailable), maxUnavailable 정확한 정의
 
+**면접 세션 피드백 (2026-03-30 1회차)**:
+- ArgoCD 롤백 언급은 올바름. kubectl rollout undo 명령어 누락 — 반드시 암기
+- maxSurge는 rollback과 무관 (rolling update 배포 전략 설정). rollback은 이전 ReplicaSet scale up
+- PDB는 eviction 게이팅 장치 — "자동으로 Pod 증설"이 아니라 "eviction API 호출 시 minAvailable 조건 위반 시 차단"
+
+---
+
+## Kubernetes Rollback 처리와 PodDisruptionBudget(PDB)
+
+**난이도**: 중급
+
+**핵심 키워드**: kubectl rollout undo, ReplicaSet, ArgoCD sync, PDB, minAvailable, maxUnavailable, kubectl drain, eviction API
+
+**모범 답변 방향**:
+- ArgoCD: 이전 Git 리비전으로 sync → 자동 롤백
+- kubectl: `kubectl rollout undo deployment/{name}` 또는 `--to-revision=N`으로 특정 버전
+- PDB 동작: `kubectl drain` 실행 시 eviction API가 PDB의 minAvailable 조건 검사 → 위반 시 eviction 거부(드레인 차단) → 새 노드에서 Pod가 Ready 상태가 되어야 eviction 허용
+- PDB는 Pod를 자동으로 늘려주는 것이 아니라 eviction 자체를 게이팅하는 안전장치
+
+**꼬리 질문 예시**:
+- "rollout undo 후 정상 여부를 어떻게 확인하나요?" → `kubectl rollout status`, `kubectl get pods`, 모니터링 지표 확인
+- "PDB의 minAvailable과 maxUnavailable의 차이는?" → minAvailable: 최소 가용 Pod 수 (절대값 또는 %), maxUnavailable: 최대 중단 허용 Pod 수
+- "drain 중 PDB 조건을 영원히 못 만족하면 어떻게 하나요?" → `--disable-eviction` 또는 `--force` 플래그 (위험 — 확인 필요), 또는 PDB를 임시 삭제
+
+**면접 세션 피드백 (2026-03-30 1회차)**:
+- 잘한 점: ArgoCD 롤백 언급, preStop + WebSocket active connection 폴링 패턴 (실무 경험 기반 강점)
+- 보완: `kubectl rollout undo` 명령어 미언급. maxSurge와 rollback 개념 혼동. PDB가 eviction을 게이팅한다는 메커니즘 미설명
+
 > 출처: Kubernetes 공식 문서 - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
 
 ---

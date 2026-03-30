@@ -168,6 +168,162 @@ if err == redis.TxFailedErr {
 
 ---
 
+## Lua 스크립트 — 상세 동작 원리
+
+Redis 2.6.0부터 지원. 서버 내장 Lua 5.1 인터프리터가 스크립트를 **단일 원자적 명령**으로 실행.
+
+### 기본 구조
+
+```lua
+-- EVAL script numkeys key [key ...] arg [arg ...]
+EVAL "
+  local val = redis.call('GET', KEYS[1])
+  if val == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+  end
+  return 0
+" 1 mykey myvalue
+```
+
+- `KEYS[N]`: Redis 키 인자 (1-indexed). Cluster에서 라우팅 결정에 사용
+- `ARGV[N]`: 키 이외의 값 인자
+- `redis.call()`: 명령 실행 — 오류 발생 시 클라이언트로 에러 전파
+- `redis.pcall()`: 명령 실행 — 오류 발생 시 스크립트 내에서 핸들링 가능 (try-catch 유사)
+
+### redis.call() vs redis.pcall()
+
+```lua
+-- redis.call(): 에러 발생 시 즉시 클라이언트에 에러 반환 (스크립트 중단)
+local result = redis.call('GET', KEYS[1])
+
+-- redis.pcall(): 에러를 테이블로 반환 → 스크립트 내에서 처리 가능
+local ok, err = pcall(function()
+  return redis.call('INCR', KEYS[1])  -- KEYS[1]이 string이면 에러
+end)
+if not ok then
+  return "error handled"
+end
+```
+
+**선택 기준**: 에러 발생 시 즉시 중단해도 되면 `redis.call()`, 에러를 스크립트 안에서 처리해야 하면 `redis.pcall()`.
+
+### EVAL vs EVALSHA — 스크립트 캐싱
+
+```bash
+# 매번 전체 스크립트 전송 (비효율)
+EVAL "return redis.call('GET', KEYS[1])" 1 mykey
+
+# SCRIPT LOAD: 스크립트를 서버에 캐싱 → SHA1 해시 반환
+SCRIPT LOAD "return redis.call('GET', KEYS[1])"
+# → "e0e1f9fabfa9d353e7f0942b4af7d46c7a914c69"
+
+# EVALSHA: SHA1로 캐싱된 스크립트 실행 (스크립트 재전송 불필요)
+EVALSHA e0e1f9fabfa9d353e7f0942b4af7d46c7a914c69 1 mykey
+```
+
+**EVALSHA 주의사항**:
+- 스크립트 캐시는 **휘발성** — 서버 재시작, `SCRIPT FLUSH`, 페일오버 시 캐시 소멸
+- EVALSHA 실행 중 캐시가 없으면 `NOSCRIPT` 에러 → 애플리케이션에서 EVAL로 폴백 처리 필요
+- 파이프라인에서 EVALSHA 사용 시 NOSCRIPT 에러 처리 어려움 → 파이프라인에서는 EVAL 권장
+
+```go
+// go-redis에서 EVALSHA + NOSCRIPT 폴백 패턴
+sha := "e0e1f9..."
+result, err := rdb.EvalSHA(ctx, sha, []string{"mykey"}).Result()
+if err != nil && strings.Contains(err.Error(), "NOSCRIPT") {
+    // 스크립트 재로드 후 재실행
+    result, err = rdb.Eval(ctx, script, []string{"mykey"}).Result()
+}
+```
+
+---
+
+## Lua 스크립트 실무 패턴
+
+### 패턴 1: 분산락 해제 (대표 사례)
+
+```lua
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+else
+    return 0
+end
+```
+
+→ MULTI/EXEC로는 GET 후 값 보고 분기할 수 없어 **반드시 Lua** 사용
+
+### 패턴 2: 재고 차감 (조건부 갱신)
+
+```lua
+local stock = tonumber(redis.call('GET', KEYS[1]))
+if stock == nil or stock <= 0 then
+    return -1  -- 재고 없음
+end
+return redis.call('DECRBY', KEYS[1], ARGV[1])
+```
+
+→ GET 후 조건 확인 + DECRBY를 원자적으로 처리. MULTI/EXEC + WATCH로도 가능하지만 충돌 시 재시도 필요 — Lua가 더 단순
+
+### 패턴 3: Cache Stampede 방지 (PER 패턴)
+
+Cache Stampede: 캐시 만료 순간 다수의 요청이 동시에 DB 조회 → DB 과부하
+
+```lua
+-- 남은 TTL을 확인해 특정 확률로 미리 갱신 트리거
+local ttl = redis.call('TTL', KEYS[1])
+local threshold = tonumber(ARGV[1])  -- 갱신 시작 임계 TTL
+if ttl < threshold then
+    -- 락을 걸어 단 하나의 요청만 DB 조회
+    if redis.call('SET', KEYS[2], '1', 'NX', 'PX', 5000) then
+        return 1  -- 이 요청이 갱신 담당
+    end
+end
+return 0  -- 기존 캐시 사용
+```
+
+> 출처:
+> - https://redis.io/docs/latest/develop/programmability/eval-intro/
+> - https://engineering.linecorp.com/ko/blog/atomic-cache-stampede-redis-lua-script/
+> - https://oneuptime.com/blog/post/2026-01-21-redis-lua-scripts-atomic-operations/view
+
+---
+
+## Redis Cluster 환경에서의 MULTI/EXEC vs Lua
+
+Redis Cluster에서는 키가 **해시 슬롯(hash slot)** 에 따라 다른 노드에 분산된다.
+
+### MULTI/EXEC의 한계 (Cluster)
+
+```bash
+MULTI
+GET key1   # 노드1에 있는 키
+GET key2   # 노드2에 있는 키 ← 다른 노드!
+EXEC       # ❌ Cross-slot 에러 발생
+```
+
+MULTI/EXEC는 **단일 노드에서만 동작** — 서로 다른 슬롯의 키를 한 트랜잭션으로 묶을 수 없음.
+
+### Lua 스크립트의 Cluster 동작
+
+```bash
+EVAL "..." 2 key1 key2  # KEYS[1]=key1, KEYS[2]=key2
+```
+
+- KEYS 인자로 키를 명시하면 Redis Cluster가 **첫 번째 키의 슬롯 노드로 스크립트를 라우팅**
+- 단, 스크립트 내 모든 키는 **같은 해시 슬롯에 있어야** 함
+- Hash Tag `{user:123}:lock` 같은 패턴으로 같은 슬롯 보장 가능
+
+```bash
+# Hash Tag로 같은 슬롯 보장
+SET {user:123}:balance 100
+SET {user:123}:lock ""
+# → 두 키 모두 "user:123" 기준 같은 슬롯
+```
+
+> 출처: https://dgle.dev/redis-multi-lua/
+
+---
+
 ## MULTI/EXEC vs Lua 스크립트 비교
 
 | 항목 | MULTI/EXEC | Lua 스크립트 |
@@ -177,12 +333,17 @@ if err == redis.TxFailedErr {
 | 롤백 | ❌ 없음 | ❌ 없음 |
 | 네트워크 효율 | 왕복 2회(MULTI+EXEC) | 왕복 1회 |
 | 복잡한 처리 | ❌ 제한적 | ✅ 복잡한 로직 가능 |
+| Redis Cluster | ❌ 단일 노드만 (Cross-slot 불가) | ✅ KEYS 인자로 라우팅 |
+| 에러 처리 | 명령별 개별 에러 | redis.call/pcall 선택 |
+| 디버깅 | 쉬움 | 어려움 (서버 사이드 실행) |
 | 사용 시나리오 | 단순 다중 명령 묶음 | 조건부 갱신, 분산락 해제 |
 
 **선택 기준**:
 - 단순히 여러 명령을 원자적으로 묶고 싶다 → MULTI/EXEC
 - 조건부 처리가 필요하다 (GET 후 값 보고 분기) → Lua 스크립트
 - 분산락 해제처럼 확인+실행 원자성 → Lua 스크립트
+- Redis Cluster 환경에서 여러 키 원자 처리 → Lua 스크립트 (Hash Tag 활용)
+- 스크립트 로직이 복잡하고 반복 호출이 많다 → SCRIPT LOAD + EVALSHA 캐싱
 
 > 출처:
 > - https://redis.uptrace.dev/guide/go-redis-pipelines.html

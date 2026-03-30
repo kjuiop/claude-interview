@@ -255,6 +255,11 @@ Delivery    → 도메인 에러를 HTTP 상태코드로 매핑
 
 참고: [[topics/golang/error-handling]]
 
+**면접 세션 피드백 (2026-03-30)**:
+- 에러 전파 방향, 사용자 노출 분리 개념은 잘 이해
+- Repository에서 sql.ErrNoRows → domain.ErrNotFound 변환 책임 누락 — 이 변환이 없으면 인프라 에러가 UseCase까지 누출됨
+- `%v` vs `%w` 혼동 — `%v`는 에러 체인 끊김, `%w`는 체인 보존. `errors.Is()`가 동작하려면 `%w` 필수
+
 ---
 
 ## Clean Architecture vs Hexagonal Architecture

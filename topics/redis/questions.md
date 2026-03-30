@@ -81,19 +81,60 @@ related: [redis/concepts]
 
 **난이도**: 심화
 
-**핵심 키워드**: 조건부 로직, 원자성, 네트워크 효율, 분산락 해제
+**핵심 키워드**: 조건부 로직, 원자성, 네트워크 효율, 분산락 해제, Redis Cluster
 
 **모범 답변 방향**:
 - 둘 다 원자성 보장, 롤백 없음
-- MULTI/EXEC: 단순 다중 명령 묶음, 조건부 처리 불가
-- Lua: 서버에서 실행 → 네트워크 왕복 1회, if/else 같은 조건부 로직 가능
+- MULTI/EXEC: 단순 다중 명령 묶음, 조건부 처리 불가, Redis Cluster에서 Cross-slot 불가
+- Lua: 서버에서 실행 → 네트워크 왕복 1회, if/else 같은 조건부 로직 가능, Cluster에서 KEYS 인자로 라우팅
 - 선택 기준: 단순 묶음 → MULTI/EXEC / 조건부 처리(GET 값 보고 분기) → Lua
-- 분산락 해제(확인+삭제)가 Lua를 써야 하는 대표 사례
+- 분산락 해제(GET 확인 + DEL 삭제 원자 처리)가 Lua를 써야 하는 대표 사례
+- 재고 차감처럼 "현재값 확인 후 조건부 갱신"도 Lua 적합
 
 **꼬리 질문 예시**:
-- 분산락 해제를 MULTI/EXEC로 구현할 수 없는 이유는?
-- Lua 스크립트의 단점은 무엇인가요? (디버깅 어려움, 길어지면 가독성 저하)
+- 분산락 해제를 MULTI/EXEC로 구현할 수 없는 이유는? → WATCH + MULTI/EXEC로 가능하지만 GET 결과를 EXEC 전에 읽어야 해서 흐름이 복잡. 조건 확인 후 분기가 불가능
+- Lua 스크립트의 단점은 무엇인가요? → 디버깅 어려움(서버 사이드 실행), 스크립트 길어지면 가독성 저하, EVALSHA 캐시 휘발성
+- Redis Cluster에서 MULTI/EXEC를 쓰면 안 되는 이유는? → 다른 슬롯의 키를 한 트랜잭션으로 묶으면 Cross-slot 에러
 
 > 출처: https://dgle.dev/redis-multi-lua/
+
+---
+
+## Redis Lua 스크립트에서 EVAL과 EVALSHA의 차이는? 언제 EVALSHA를 사용해야 하나요?
+
+**난이도**: 심화
+
+**핵심 키워드**: EVAL, EVALSHA, SCRIPT LOAD, SHA1, 스크립트 캐싱, NOSCRIPT 에러
+
+**모범 답변 방향**:
+- EVAL: 매 호출마다 전체 스크립트를 서버에 전송 → 네트워크 오버헤드
+- SCRIPT LOAD: 스크립트를 서버에 캐싱 후 SHA1 해시 반환
+- EVALSHA: SHA1만 전송 → 스크립트 반복 호출 시 네트워크 효율적
+- 주의: 스크립트 캐시는 휘발성 (재시작, SCRIPT FLUSH, 페일오버 시 소멸)
+- NOSCRIPT 에러 발생 시 EVAL로 폴백하는 방어 코드 필수
+
+**꼬리 질문 예시**:
+- EVALSHA 사용 중 서버가 재시작되면 어떻게 되나요? → NOSCRIPT 에러 → EVAL로 재로드 필요
+- 파이프라인에서 EVALSHA를 쓰면 안 되는 이유는? → 파이프라인 중 NOSCRIPT 에러가 발생해도 처리가 어려움 → EVAL 권장
+
+> 출처: https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+---
+
+## redis.call()과 redis.pcall()의 차이는 무엇인가요?
+
+**난이도**: 중급
+
+**핵심 키워드**: redis.call, redis.pcall, 에러 처리, 스크립트 중단
+
+**모범 답변 방향**:
+- `redis.call()`: 에러 발생 시 즉시 클라이언트에 에러 전파 + 스크립트 중단
+- `redis.pcall()`: 에러를 테이블로 반환 → 스크립트 내에서 catch하여 처리 가능
+- 선택 기준: 에러 발생 시 그냥 실패해도 되면 call(), 에러에 따라 다른 로직 실행 필요하면 pcall()
+
+**꼬리 질문 예시**:
+- Lua 스크립트에서 롤백이 안 된다면 부분 실행 중 에러 처리는 어떻게 하나요?
+
+> 출처: https://redis.io/docs/latest/develop/programmability/eval-intro/
 
 ---

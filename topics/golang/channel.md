@@ -56,6 +56,11 @@ case <-ctx.Done():
 - 오개념: "버퍼 가득 차면 drop" → 실제로는 sender 블로킹
 - 이력서 연결: 채팅 서버에서 select+default로 drop 처리한 경험과 연결할 것
 
+**면접 세션 피드백 (2026-03-30)**:
+- select를 "분기처리"로 설명 — 핵심은 **여러 채널을 동시에 대기**, 준비된 케이스가 여러 개면 **non-deterministic 선택**
+- case 순서는 우선순위와 무관
+- ctx.Done()은 callback이 아닌 채널 — 취소 시 채널이 close되어 읽힘. `case <-ctx.Done(): return` 패턴 암기 필요
+
 ---
 
 **Q. select statement를 어떤 상황에서 사용하나요?**
