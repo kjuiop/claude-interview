@@ -1,6 +1,6 @@
 ---
 tags: [golang, go, clean-architecture, architecture, hexagonal, solid]
-related: [interface, error-handling, system-design]
+related: [interface, error-handling, system-design, ddd-modular-monolith, hexagonal-architecture]
 ---
 
 # Golang — Clean Architecture

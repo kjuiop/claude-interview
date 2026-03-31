@@ -1,6 +1,6 @@
 ---
 tags: [golang, go, hexagonal-architecture, ports-and-adapters, architecture]
-related: [clean-architecture, interface, system-design]
+related: [clean-architecture, interface, system-design, ddd-modular-monolith]
 ---
 
 # Golang — Hexagonal Architecture (Ports & Adapters)

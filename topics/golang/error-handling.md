@@ -49,6 +49,55 @@ if errors.As(err, &ve) { fmt.Println(ve.Field) }
 
 ---
 
+## 레이어별 에러 변환 패턴
+
+클린 아키텍처에서 에러는 각 레이어를 지나며 **변환(convert)** 된다. 래핑(wrap)과 다름에 주의.
+
+```go
+// domain/errors.go — 도메인 에러 정의
+var ErrUserNotFound = errors.New("user not found")
+
+// repository.go — DB 에러 체인 유지
+func (r *userRepo) GetByID(id int) (*User, error) {
+    var u User
+    err := r.db.QueryRow(...).Scan(&u)
+    if err != nil {
+        return nil, fmt.Errorf("getUserByID: %w", err) // sql.ErrNoRows 체인 유지
+    }
+    return &u, nil
+}
+
+// service.go — sql 에러를 도메인 에러로 교체
+func (s *userService) GetUser(id int) (*User, error) {
+    u, err := s.repo.GetByID(id)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            return nil, ErrUserNotFound // sql 에러 노출 X, 도메인 에러로 교체
+        }
+        return nil, fmt.Errorf("userService.GetUser: %w", err)
+    }
+    return u, nil
+}
+
+// handler.go — 도메인 에러를 HTTP 상태 코드로 매핑
+func (h *userHandler) GetUser(c *gin.Context) {
+    u, err := h.service.GetUser(id)
+    if err != nil {
+        if errors.Is(err, service.ErrUserNotFound) {
+            c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+        return
+    }
+    c.JSON(http.StatusOK, u)
+}
+```
+
+**핵심:** Repository는 `%w`로 체인 유지 → Service에서 `errors.Is()`로 감지 후 도메인 에러로 **교체** → Delivery에서 `errors.Is()`로 HTTP 상태 코드 결정
+
+---
+
 ## 면접 질문
 
 **Q. Go의 에러 핸들링 철학과 best practice는?**

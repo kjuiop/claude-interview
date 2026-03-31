@@ -1,6 +1,6 @@
 ---
 tags: [golang, go, interface, duck-typing, polymorphism]
-related: [goroutine, memory]
+related: [goroutine, memory, error-handling, gin]
 ---
 
 # Golang — Interface
