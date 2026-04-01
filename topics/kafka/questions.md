@@ -84,6 +84,15 @@ related: [rabbitmq, distributed-systems]
 - "`abortTransaction()` 후 메시지는?" → 토픽에 기록되나 `read_committed` 컨슈머는 marker로 인해 무시
 - "transactional.id 없이 exactly-once 가능?" → 불가. 재시작 시 PID 재발급으로 멱등성 깨짐
 
+**`sendOffsetsToTransaction` 없을 때 두 실패 케이스 정리** (2026-04-01 세션 — 자주 반대로 기억함):
+
+| 케이스 | 결과 | 설명 |
+|---|---|---|
+| Produce 성공 + Offset commit **실패** | **중복 처리** (at-least-once) | offset 미올라감 → 같은 메시지 재소비 → 중복 produce |
+| Offset commit 성공 + Produce **실패** | **메시지 유실** (at-most-once) | offset 올라감 → 메시지 재소비 안 함 → output topic에 없음 |
+
+- `sendOffsetsToTransaction`은 두 작업을 하나의 트랜잭션으로 묶어 둘 다 커밋되거나 둘 다 롤백되게 함 → exactly-once 완성
+
 ---
 
 ## 메시지 순서 보장

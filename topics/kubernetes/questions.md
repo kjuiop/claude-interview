@@ -39,6 +39,36 @@ related: [kubernetes/concepts]
 
 ---
 
+## Pod, Service, Deployment 역할 차이
+
+**난이도**: 기초
+
+**핵심 키워드**: Pod(ephemeral, 컨테이너 단위), Service(ClusterIP, Label Selector, stable endpoint), Deployment(ReplicaSet, desired state)
+
+**모범 답변 방향**:
+- **Pod**: K8s에서 배포 가능한 최소 단위. 1개 이상의 컨테이너 포함. **ephemeral** — 재시작 시 새 IP 발급
+- **Service**: Pod IP가 바뀌어도 안정적인 접근 가능하도록 **stable endpoint(ClusterIP)** 제공. Label Selector로 대상 Pod 선택
+  - ClusterIP: 클러스터 내부 전용 (default)
+  - NodePort: 노드 IP + 포트로 외부 접근
+  - LoadBalancer: 클라우드 LB 프로비저닝 → 외부 트래픽 진입
+- **Deployment**: 원하는 Pod 개수(replica count)를 유지하는 **desired state 관리**. ReplicaSet을 통해 Rolling Update·Rollback 처리
+
+**Service가 필요한 이유 (꼬리 질문 핵심)**:
+- Pod는 ephemeral → IP 변경 → 직접 IP로 접근 불가
+- Service = Label Selector로 살아있는 Pod를 동적으로 찾아 라우팅 → Pod가 교체돼도 Service 주소는 고정
+
+**꼬리 질문 예시:**
+- "ClusterIP와 LoadBalancer의 차이는?"
+- "Deployment 없이 Pod를 직접 배포하면 어떤 문제가 있나요?"
+- "ReplicaSet과 Deployment의 관계는?"
+
+**면접 세션 피드백 (2026-04-01 3회차)**:
+- Pod 휘발성과 Service 필요성 연결 정확
+- 보완: Label Selector 메커니즘, Service 타입 3가지 구분 추가 필요
+- Deployment를 "차트"로 표현 → "manifest/spec"이 정확 (Helm 차트와 혼동 주의)
+
+---
+
 ## Kubernetes Rollback 처리와 PodDisruptionBudget(PDB)
 
 **난이도**: 중급

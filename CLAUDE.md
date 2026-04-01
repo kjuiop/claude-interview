@@ -2,15 +2,23 @@
 
 ## Harness Layer (항상 먼저 읽을 것)
 
-모든 세션 시작 시 아래 3개 파일을 **병렬로** 읽는다:
+모든 세션 시작 시 아래 4개 파일을 **병렬로** 읽는다:
 1. `_harness/status.md` — 현재 준비 수준, 취약 기술, 우선순위
 2. `_harness/constraints.md` — 파일 형식 규칙 (파일 생성 전 체크)
 3. `_harness/entropy.md` — 채워야 할 gaps, 처리할 불일치
+4. `MEMORY.md` — 마지막 세션 요약, 미결 사항, 인수인계 메모
 
 세션 종료 시:
 - `_harness/status.md` 기술 수준 업데이트
+- `MEMORY.md` 마지막 세션 요약 갱신
 - 발견된 문제는 `_harness/entropy.md`에 기록
 - 새 개념/질문은 즉시 해당 `topics/` 파일에 반영
+
+## 접근 금지 영역 (AI가 수정하지 않는 것)
+
+- `resume/` — 개인 정보, 사용자만 직접 수정
+- `jobs/` — 공고 정보, gitignore 대상
+- `_harness/constraints.md` — 구조 규칙 자체를 변경하려면 사용자 확인 후 진행
 
 ---
 
@@ -164,11 +172,27 @@ related: [연관기술1, 연관기술2]
 ```
 claude-interview/
 ├── CLAUDE.md                  # Claude 동작 지침 (git 공개)
+├── AGENTS.md                  # 범용 에이전트 진입점 (git 공개)
+├── MEMORY.md                  # 세션 간 연속성 (git 공개)
 ├── README.md                  # 사용 방법 (git 공개)
+├── _harness/                  # 하네스 레이어
+│   ├── status.md              # 준비 수준 동적 컨텍스트
+│   ├── constraints.md         # 아키텍처 제약 (기계 판독형)
+│   └── entropy.md             # 불일치/gaps 추적
+├── 00-inbox/                  # 빠른 캡처 (fleeting notes)
+├── .claude/skills/            # 스킬 파일
+│   ├── 출근/                  # 하루 시작, 질문 10개 생성
+│   ├── 퇴근/                  # 하루 마무리 linter
+│   ├── 면접/                  # 면접 세션 진행
+│   ├── 피드백/                # 세션 피드백 기록
+│   ├── question/              # 단일 질문 생성
+│   ├── braindump/             # 빠른 아이디어 캡처
+│   └── weekly-review/         # 주간 회고 + entropy 정리
 ├── topics/                    # 기술별 지식 베이스 (git 공개)
 │   └── {기술명}/
 │       ├── concepts.md
 │       └── questions.md
+├── daily/                     # 일일 면접 준비 기록 (git 공개)
 ├── resume/                    # gitignore — 본인 프로필 (비공개)
 │   └── profile.md
 └── jobs/                      # gitignore — 공고별 면접 준비 (비공개)

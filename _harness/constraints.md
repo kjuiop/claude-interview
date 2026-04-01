@@ -87,9 +87,15 @@ status: active | closed
 topics/golang/     → 주제별 파일 (concepts.md/questions.md 금지)
 topics/{기타}/     → concepts.md + questions.md 만
 _harness/          → status.md, constraints.md, entropy.md 만
+00-inbox/          → fleeting notes (YYYYMMDDHHmm-{키워드}.md 형식)
 resume/            → profile.md 만 (gitignore)
 jobs/              → gitignore
 ```
+
+### 00-inbox/ 처리 규칙
+- 7일 이상 방치된 파일은 `/weekly-review` 또는 `/퇴근` 시 처리
+- 처리 = topics/ 이동 또는 삭제, inbox에 영구 보관 금지
+- 이동 시 frontmatter의 `status: inbox` → `status: processed` 로 변경 후 삭제
 
 ---
 

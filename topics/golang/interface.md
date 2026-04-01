@@ -64,6 +64,15 @@ fmt.Println(i == nil) // false! — interface는 (타입, 값) 쌍이므로 타�
 - interface의 zero value: 타입 포인터와 데이터 포인터 모두 nil일 때만 nil
 - 함수가 error interface를 반환할 때 포인터 타입 직접 반환하면 이 함정에 빠질 수 있음
 
+**Q. 인터페이스의 암시적 구현이 테스트와 외부 라이브러리 연동에서 어떤 이점이 있나요?**
+- **테스트 Mock**: 인터페이스 메서드만 구현한 Mock struct를 `implements` 선언 없이 바로 주입 가능
+- **외부 라이브러리 연동**: 수정 불가능한 외부 패키지 struct도 메서드만 맞으면 내 인터페이스에 끼워 넣을 수 있음. Java는 소스에 `implements` 선언 필요하므로 외부 코드에는 적용 불가
+- **Go 관용구**: `"Accept interfaces, return structs"` — 파라미터는 인터페이스로 받아 결합도를 낮추고, 반환은 구체 타입으로 명시
+
+**면접 세션 피드백 (2026-04-01)**:
+- 잘한 점: 암시적 구현 핵심, Mock 테스트 연결, Java 비교
+- 보완: 외부 라이브러리 연동 예시, `Accept interfaces, return structs` 관용구 추가로 완성도 향상
+
 **Q. 인터페이스를 사용하면 성능에 영향이 있나요?**
 - interface 값은 힙으로 escape됨 → GC 부하 증가 가능
 - 인터페이스 메서드 호출은 간접 호출 (vtable lookup) → 직접 호출보다 약간 느림

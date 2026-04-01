@@ -9,6 +9,46 @@ related: [postgresql, redis]
 
 ---
 
+**Q. 트랜잭션의 ACID 속성을 설명해주세요. MySQL의 기본 격리 수준과 Dirty Read / Non-Repeatable Read / Phantom Read를 연결해서 설명해주세요.**
+
+**난이도**: 기초
+
+**핵심 키워드**: Atomicity, Consistency, Isolation, Durability, REPEATABLE READ, MVCC, Dirty Read, Non-Repeatable Read, Phantom Read, Next-Key Lock
+
+**ACID 정의**:
+- A(Atomicity): 트랜잭션 내 작업이 모두 성공하거나 모두 실패 (all or nothing)
+- C(Consistency): 트랜잭션 전후 데이터 무결성 제약 조건 유지 (FK, Unique 등)
+- I(Isolation): 동시 트랜잭션 간 간섭 없음 (격리 수준으로 조절)
+- D(Durability): 커밋된 데이터는 시스템 장애 후에도 영속
+
+**MySQL 기본 격리 수준: REPEATABLE READ**
+
+| 격리 수준 | Dirty Read | Non-Repeatable Read | Phantom Read |
+|---|---|---|---|
+| READ UNCOMMITTED | 발생 | 발생 | 발생 |
+| READ COMMITTED | 해결 | 발생 | 발생 |
+| REPEATABLE READ | 해결 | 해결 (MVCC) | 발생(표준) / InnoDB는 Gap Lock으로 방지 |
+| SERIALIZABLE | 해결 | 해결 | 해결 |
+
+- **Dirty Read**: 롤백된(커밋 안 된) 데이터를 읽는 현상
+- **Non-Repeatable Read**: 같은 트랜잭션에서 동일 row를 두 번 읽었을 때 다른 값 (UPDATE 발생)
+- **Phantom Read**: 동일 범위 쿼리를 두 번 실행 시 새 row가 나타남 (INSERT 발생)
+- **InnoDB 특이점**: REPEATABLE READ에서도 **Next-Key Lock(Gap Lock)** 으로 Phantom Read 실질적 방지 (SQL 표준과 다름)
+
+**실무 연결 (와그 결제/예약 도메인)**:
+- 초과 예약 방지: REPEATABLE READ + `SELECT ... FOR UPDATE`로 명시적 X-lock
+- 결제 원자성: @Transactional + Atomicity 보장
+
+**꼬리 질문 예시:**
+- "격리 수준을 높이면 어떤 비용이 발생하나요?"
+- "SELECT FOR UPDATE와 일반 SELECT의 차이는?"
+
+**면접 세션 피드백 (2026-04-01 3회차)**:
+- REPEATABLE READ·MVCC 연결 정확. Dirty Read·Non-Repeatable Read 정의 정확.
+- 보완: Phantom Read = "범위 쿼리에서 INSERT로 새 row 출현". InnoDB의 Gap Lock으로 실질 방지 언급 필요.
+
+---
+
 **Q. MySQL에서 인덱스를 잘못 설계했을 때 발생하는 문제와, 실무에서 인덱스를 어떻게 선택하나요?**
 - 트레이드오프: 인덱스 많을수록 조회↑, 쓰기↓, 디스크 추가 사용
 - 선택 기준: 자주 사용되는 조회 API → slow query → 카디널리티 높은 컬럼 우선

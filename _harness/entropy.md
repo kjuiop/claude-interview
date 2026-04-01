@@ -1,6 +1,6 @@
 ---
 type: harness-entropy
-updated: 2026-03-27
+updated: 2026-04-01
 ---
 
 # 엔트로피 추적 (Entropy Management)
@@ -24,12 +24,12 @@ updated: 2026-03-27
 
 | 기술 | 파일 | 우선순위 | 이유 |
 |---|---|---|---|
-| kafka | `topics/kafka/concepts.md` | 🔴 높음 | 화이트큐브 공고 필수 스택 |
-| kafka | `topics/kafka/questions.md` | 🔴 높음 | 면접 준비 필요 |
+| distributed-systems | `topics/distributed-systems/concepts.md` | 🔴 높음 | CAP 정리 오늘 세션 전혀 모름 → 개념 추가 완료, 복습 필요 |
+| kotlin | `topics/kotlin/concepts.md` | 🔴 높음 | suspend fun Continuation, Dispatcher 타입 오개념. 스텁만 있음 |
+| kafka | `topics/kafka/concepts.md` | 🟡 중간 | Exactly-Once 흐름 sessions에서 다뤘으나 concepts 미정리 |
 | rabbitmq | `topics/rabbitmq/concepts.md` | 🟡 중간 | 공고 언급 |
 | rabbitmq | `topics/rabbitmq/questions.md` | 🟡 중간 | 공고 언급 |
 | java | `topics/java/concepts.md` | 🟡 중간 | 공고 요구사항 |
-| kotlin | `topics/kotlin/concepts.md` | 🟡 중간 | 공고 요구사항 |
 | elasticsearch | `topics/elasticsearch/concepts.md` | 🟡 중간 | 공고 언급 |
 
 ---
@@ -50,7 +50,10 @@ updated: 2026-03-27
 
 | 날짜 | 세션 | 문제 상황 | 필요한 보강 |
 |---|---|---|---|
-| - | - | - | - |
+| 2026-04-01 | 4회차 | CAP 정리 전혀 모름 | distributed-systems/concepts.md CAP 개념 작성 + 복습 |
+| 2026-04-01 | 3회차 | Kotlin Coroutine "싱글스레드 기반" 오개념 | kotlin/concepts.md Dispatcher 타입 설명 추가 필요 |
+| 2026-04-01 | 1회차 | TLS Handshake 인증서 전송 방향 역전 | 2회차에서 교정 완료 |
+| 2026-04-01 | 1,2회차 | Kafka 두 실패 케이스(중복 vs 유실) 정반대 | 2회차에서 교정 완료 |
 
 ---
 

@@ -26,6 +26,13 @@ related: [distributed-systems, golang, kafka-rabbitmq]
 
 ---
 
+**면접 세션 피드백 (2026-04-01)**:
+- 잘한 점: ephemeral/persistent 차이 + 트랜스코더 70대 관리 실사례 연결. polling vs Watch 효율성 비교가 핵심 강점
+- 보완: Watch는 **1회성** — 이벤트 수신 후 재등록 필요. 작업 할당 메커니즘(children 목록 조회 → 가용 서버 분배) 한 줄 추가하면 완성도 향상
+- 마무리 표현: "70대 서버 polling은 70번의 주기적 네트워크 요청이지만, Watch는 변경 시에만 이벤트가 오므로 불필요한 부하가 없었습니다"
+
+---
+
 **Q. ZooKeeper로 Feature Flag를 어떻게 구현했나요?**
 - ZooKeeper Watch로 설정 노드 변경 감지
 - N대 서버에 동시에 전환 신호 전달 → 일관된 시점에 모든 인스턴스 전환

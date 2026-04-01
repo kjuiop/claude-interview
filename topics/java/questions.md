@@ -132,6 +132,32 @@ related: [kotlin, distributed-systems]
 - fetch join + Pageable을 같이 쓰면 어떤 문제가 생기나요? 어떻게 해결하나요?
 - 즉시로딩(EAGER)으로 설정하면 N+1이 해결되나요?
 
+**Fetch Join + Pagination 상세** (2026-04-01 세션 보완):
+- Hibernate 경고: `HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory!`
+- 동작: DB에 LIMIT/OFFSET 미적용 → **전체 데이터를 메모리에 올린 후 애플리케이션에서 페이징** → OOM 위험
+- 해결 방법 2가지:
+  ```java
+  // 방법 1: ID 먼저 페이지네이션 후 fetch join
+  List<Long> ids = queryFactory.select(post.id).from(post)
+      .offset(pageable.getOffset()).limit(pageable.getPageSize()).fetch();
+  List<Post> posts = queryFactory.selectFrom(post)
+      .join(post.author).fetchJoin()
+      .where(post.id.in(ids)).fetch();
+
+  // 방법 2: @BatchSize — N+1을 IN 쿼리로 묶어 처리
+  @BatchSize(size = 100)
+  @OneToMany(mappedBy = "post")
+  private List<Comment> comments;
+  ```
+
+**@EntityGraph 선언 위치 주의** (자주 나오는 오답):
+- ❌ Entity 필드 위 → ✅ **Repository 메서드 위**에 선언
+  ```java
+  @EntityGraph(attributePaths = {"author"})
+  List<Post> findAll();  // Repository 메서드에 선언
+  ```
+- Entity 클래스 위에 이름 등록하는 것은 `@NamedEntityGraph` (별도 개념)
+
 ---
 
 ## @Transactional 을 직접 구현한다면 어떻게 해야 하나요?

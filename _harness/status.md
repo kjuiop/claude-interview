@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-03-31
+updated: 2026-04-01
 ---
 
 # 현재 준비 상태 스냅샷
@@ -28,28 +28,34 @@ updated: 2026-03-31
 | golang/goroutine | ★★★★★ | 2026-03-27 | - |
 | golang/channel | ★★★★☆ | 2026-03-27 | select + context 조합 |
 | golang/map | ★★★★☆ | 2026-03-27 | concurrent 접근 패턴 |
+| golang/interface | ★★★★☆ | 2026-04-01 | Accept interfaces, return structs 관용구, 외부 라이브러리 연동 예시 |
 | golang/error-handling | ★★★★☆ | 2026-03-31 | 도메인 에러 교체(convert) 패턴, gin API 구문 정확도 |
 | golang/clean-architecture | ★★★★☆ | 2026-03-31 | 레이어별 에러 변환 흐름 정착 |
 | golang/hexagonal | ★★★☆☆ | 2026-03-27 | Port/Adapter 실제 코드 작성 |
 | mongodb | ★★★☆☆ | 2026-03-31 | 복합 인덱스 순서, Aggregation Pipeline 개념 |
 | python-fastapi | ★★★☆☆ | 2026-03-31 | asyncio vs goroutine 비교, ProcessPoolExecutor |
 | java/spring | ★★★★☆ | 2026-03-31 | checked exception rollback, 별도 클래스 분리 패턴 |
-| java/jpa | ★★★☆☆ | 2026-03-31 | N+1 쿼리 수(1+N=N+1), @EntityGraph, pagination 주의 |
-| distributed-systems | ★★★★☆ | 2026-03-31 | 동시성 제어(낙관/비관적 락, 원자적 업데이트) |
-| redis | ★★★★☆ | 2026-03-31 | Redis-DB 정합성, Redisson |
-| kafka | ★★☆☆☆ | - | 전반적으로 부족 |
+| java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
+| networking | ★★★★☆ | 2026-04-01 | TLS Handshake 흐름 2회차에 완전 교정. Client Hello 용어 추가 필요 |
+| mysql | ★★★★☆ | 2026-04-01 | ACID 정의 정확. Next-Key Lock(Gap Lock) Phantom Read 방지 심화 추가 필요 |
+| redis | ★★★★☆ | 2026-04-01 | Hash vs String 선택 기준(메모리 효율, TTL 제한) 보완 필요 |
+| kafka | ★★★☆☆ | 2026-04-01 | Exactly-Once 흐름 교정. sendOffsetsToTransaction 두 실패 케이스 정착 |
+| kotlin | ★★★☆☆ | 2026-04-01 | suspend fun Continuation 미인지, Dispatcher 타입 오개념(싱글스레드 아님) |
+| kubernetes | ★★★☆☆ | 2026-04-01 | Pod/Service/Deployment 기본 맞음. Label Selector, Service 타입 추가 필요 |
+| zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
+| distributed-systems | ★★☆☆☆ | 2026-04-01 | CAP 정리 전혀 모름 → 즉시 암기 필요 |
 | elasticsearch | ★★☆☆☆ | - | 전반적으로 부족 |
-| kubernetes | ★★★☆☆ | - | HPA, 장애 대응 |
 
 ---
 
 ## 다음 우선순위
 
-1. `kafka` — 오늘 세션 이후 2회 연속 "다음 주제" 지정, 최우선
-2. `java/jpa` — N+1 쿼리 수 정확히 암기, @EntityGraph, pagination 주의
-3. `elasticsearch` — 공고 요구사항, 미정리
-4. `golang/hexagonal` — 실제 코드 작성 연습 필요
-5. `kubernetes` — 갭 분석에서 취약점으로 식별
+1. `distributed-systems` (CAP 정리) — 오늘 세션에서 전혀 모름. 즉시 암기 최우선
+2. `kotlin` — suspend fun Continuation, Dispatcher 타입, launch vs async 오개념 교정
+3. `kubernetes` — Label Selector, Service 타입(ClusterIP/NodePort/LoadBalancer)
+4. `redis` — Hash vs String 선택 기준 심화, 각 자료구조 패턴
+5. `elasticsearch` — 공고 요구사항, 미정리
+6. `golang/hexagonal` — 실제 코드 작성 연습 필요
 
 ---
 

@@ -9,6 +9,33 @@ related: [redis/concepts]
 
 ---
 
+## Redis 기본 자료구조 5가지를 각각 언제 사용하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: String, List, Hash, Set, Sorted Set, ziplist, TTL, LPUSH/RPOP
+
+**모범 답변 방향**:
+- **String**: 단순 Key-Value, 최대 512MB, binary 가능. 캐싱, 카운터(INCR), 세션 토큰
+- **List**: LPUSH/RPOP(큐), LPUSH/LPOP(스택). 작업 큐, 최근 N개 로그 저장
+- **Hash**: 하나의 키에 여러 필드 저장. 사용자 프로필(`user:1` → `{name, age, email}`). ziplist 압축으로 메모리 효율
+- **Set**: 중복 없는 집합. 태그, 좋아요 목록, 교집합/합집합 연산
+- **Sorted Set**: score 기준 정렬. 랭킹, 리더보드, 시간 순 이벤트 로그
+
+**Hash vs String 다중 키 선택 기준**:
+- Hash: 관련 데이터 묶음, 메모리 효율 (128필드 이하 ziplist 인코딩)
+- String 다중 키: **개별 필드 TTL이 필요할 때** (Hash는 키 전체에만 TTL 적용 가능)
+
+**꼬리 질문 예시**:
+- Hash와 String 여러 개를 쓸 때의 차이 및 선택 기준은?
+- Sorted Set의 시간 복잡도는? (ZADD: O(log N), ZRANGE: O(log N + M))
+
+**면접 세션 피드백 (2026-04-01)**:
+- 잘한 점: 5가지 용도 기본 정의, Sorted Set 랭킹 예시
+- 보완: Hash vs String 선택 기준(메모리 효율, TTL 제한) 필수 추가
+
+---
+
 ## Redis 분산락을 어떻게 구현하나요? SETNX와 Redlock의 차이도 설명해주세요.
 
 **난이도**: 심화
