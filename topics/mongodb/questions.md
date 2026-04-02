@@ -54,6 +54,13 @@ db.messages.aggregate([
 - Aggregation Pipeline에서 인덱스가 활용되는 조건은?
 - `$unwind`는 언제 사용하나요?
 
+**면접 세션 피드백 (2026-04-02 3회차)**:
+- 잘한 점: SQL 절 매핑 정확. 실무 파이프라인(`$match` 날짜범위 → `$group` roomId+sum → `$sort` -1 → `$limit`) 자연스럽게 구성. SQL 지식으로 추론하는 전략 유효.
+- 보완:
+  - `$group` 문법 암기: `{ _id: "$roomId", messageCount: { $sum: 1 } }`. 필드 앞 `$` 필수.
+  - `$match` 앞 배치 이유 언급: 인덱스 활용으로 처리 문서 수 최소화 → 성능 핵심
+  - "직접 경험 없지만 SQL 지식으로 추론" 선언 먼저 → 면접관 신뢰 확보
+
 ---
 
 ## 인덱스 전략

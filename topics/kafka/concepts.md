@@ -135,10 +135,112 @@ enable.auto.commit=false
 
 ---
 
-## 작성 예정
+## Kafka 아키텍처 핵심 구성 요소
 
-- Kafka 아키텍처 (Broker, Topic, Partition, Replica)
-- Consumer Group & Rebalancing
-- Kafka vs RabbitMQ 차이
-- KRaft 모드 (ZooKeeper 의존성 제거)
-- Dead Letter Queue
+### Broker
+- Kafka 클러스터를 구성하는 **서버 노드**. 메시지를 받아 디스크에 저장하고 Consumer에게 전달
+- 여러 Broker가 모여 Kafka Cluster를 구성
+- 각 Broker는 고유 ID(broker.id)를 가지며, 일부 Partition의 Leader 역할 담당
+- **Controller Broker**: 클러스터 내 특별 역할 — Leader 선출, 파티션 재배정 관리
+
+### Topic & Partition
+- **Topic**: 메시지를 분류하는 논리적 단위 (DB의 테이블 유사)
+- **Partition**: Topic을 나누는 물리적 단위. 각 파티션은 독립된 순서가 있는 로그 파일
+- 파티션은 여러 Broker에 분산 저장 → **수평 확장** 가능
+- 파티션 수 = 최대 병렬 처리 가능한 Consumer 수 상한선
+
+### Producer 원리
+- 메시지를 **Broker의 특정 파티션 Leader**에게 직접 전송
+- **Partition Key**: 키 있으면 `hash(key) % partition_count`로 파티션 결정 → 동일 키는 동일 파티션 보장
+- 키 없으면 Round-Robin 또는 Sticky Partitioner(배치 단위 고정)로 분산
+
+**Producer Batch Processing**:
+- 메시지를 즉시 보내지 않고 **배치로 묶어서 전송** → 네트워크 왕복 횟수 감소
+- `linger.ms`: 배치 대기 시간 (기본 0ms — 즉시 전송). 높일수록 처리량↑, 지연↑
+- `batch.size`: 배치 최대 크기 (기본 16KB). 도달 시 즉시 전송
+- `compression.type`: gzip/snappy/lz4 — 배치 단위로 압축 → 처리량 향상
+- `buffer.memory`: 전송 대기 버퍼 총 크기
+
+### Consumer 원리
+- **Pull 방식**: Consumer가 Broker에 주기적으로 poll() 요청 → 메시지 가져옴
+- 읽은 메시지를 삭제하지 않음 → **여러 Consumer Group이 독립적으로 소비 가능**
+- `max.poll.records`: 한 번 poll()에서 가져올 최대 메시지 수
+
+**Consumer Offset & Commit**:
+- **Offset**: 파티션 내 메시지의 고유 순번 (0부터 시작)
+- Consumer는 자신이 읽은 위치(offset)를 `__consumer_offsets` 토픽에 커밋
+- **자동 커밋** (`enable.auto.commit=true`): 주기적 자동 커밋 → 처리 전 크래시 시 메시지 유실 가능
+- **수동 커밋**: 처리 완료 후 명시적 `commitSync()` / `commitAsync()` 호출 → At-least-once 보장
+
+### Consumer Group
+- **같은 그룹 ID**를 가진 Consumer들의 집합
+- 하나의 파티션은 **같은 그룹 내 하나의 Consumer만** 할당됨 → 중복 처리 방지
+- 다른 그룹들은 독립적으로 같은 토픽을 소비 → 각 그룹별 독립 offset 관리
+- Consumer 수 > 파티션 수: 초과 Consumer는 idle 상태 (낭비)
+- Consumer 수 < 파티션 수: 일부 Consumer가 여러 파티션 담당
+
+**Consumer 파티션 할당 전략**:
+| 전략 | 방식 |
+|---|---|
+| RangeAssignor | 토픽별로 파티션 범위를 나눠 할당. 토픽 수 많으면 불균형 발생 |
+| RoundRobinAssignor | 전체 파티션을 순서대로 균등 배분 |
+| StickyAssignor | 리밸런싱 시 기존 할당 최대한 유지 + 균등 배분 |
+| **CooperativeStickyAssignor** | StickyAssignor + Incremental 리밸런싱 (Stop-The-World 방지) |
+
+---
+
+## Kafka Cluster & 복제 구조
+
+### Replica (복제본)
+- 각 파티션은 N개의 복제본을 가짐 (`replication.factor` 설정)
+- **Leader Replica**: 모든 읽기/쓰기 요청을 처리하는 실제 파티션
+- **Follower Replica**: Leader를 복제하여 장애 대비 대기. 클라이언트와 직접 통신 안 함
+- 파티션의 Leader와 Follower는 **서로 다른 Broker**에 분산 배치 → 장애 격리
+
+### ISR (In-Sync Replicas)
+- **Leader와 동기화 상태인 Replica 집합**
+- Follower가 Leader의 최신 메시지를 따라잡고 있으면 ISR에 포함
+- 지정 시간(`replica.lag.time.max.ms`, 기본 30초) 내 복제 못하면 ISR에서 제외
+- Leader 장애 시 **ISR 내 Follower 중에서만** 새 Leader 선출 → 데이터 유실 방지
+
+### min.insync.replicas
+- 메시지가 **커밋되기 위해 최소로 동기화되어야 하는 ISR 수**
+- `acks=all`(Producer 설정)과 함께 사용해야 의미 있음
+
+| acks 설정 | 동작 |
+|---|---|
+| `acks=0` | 브로커 응답 안 기다림 → 최고 성능, 유실 가능 |
+| `acks=1` | Leader 기록 확인만 → Leader 장애 시 유실 가능 |
+| `acks=all`(-1) | **ISR 전체** 기록 확인 → 가장 안전, 지연 증가 |
+
+**`min.insync.replicas` 조합 예시** (replication.factor=3):
+```
+min.insync.replicas=1: ISR 1개만 있어도 커밋 → 가용성↑, 내구성↓
+min.insync.replicas=2: ISR 최소 2개 필요 → 균형 (권장)
+min.insync.replicas=3: ISR 3개 모두 필요 → 내구성 최대, 브로커 1개만 죽어도 쓰기 불가
+```
+- `acks=all` + `min.insync.replicas=2`가 실무 권장 조합
+
+### Leader 선출 과정
+1. Broker 장애 감지 (Controller Broker 또는 KRaft 감지)
+2. 해당 파티션의 ISR 목록 조회
+3. ISR 중 첫 번째 Broker를 새 Leader로 선출
+4. 클라이언트에 메타데이터 업데이트
+
+---
+
+## 병렬 Consumer (Parallel Consumer)
+
+- **파티션 수 = 최대 병렬도**: 파티션 10개 → 동시에 최대 10개 Consumer가 병렬 처리
+- 처리량 향상 전략:
+  1. **파티션 수 증가** + Consumer 수 증가 → 순평행 처리
+  2. **Consumer 내부 멀티스레드**: 하나의 Consumer가 받은 메시지를 스레드 풀로 처리 (순서 보장 어려워짐)
+  3. **Consumer Group 복수 운영**: 서로 다른 역할의 서비스가 같은 토픽 독립 소비
+- 주의: Consumer 수 > 파티션 수면 초과 Consumer는 유휴 상태 (비용 낭비)
+
+---
+
+## KRaft 모드 (Kafka 4.0+)
+- ZooKeeper 완전 제거 → Kafka 자체 Raft 합의 알고리즘으로 메타데이터 관리
+- Controller 역할을 전담하는 KRaft Controller가 클러스터 상태 관리
+- 장점: 운영 단순화, 빠른 Controller Failover, 파티션 수 확장성 개선

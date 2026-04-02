@@ -24,6 +24,10 @@ related: [kotlin, distributed-systems]
 - 횡단 관심사의 실제 예시를 들어주세요.
 - Spring에서 AOP는 어떤 방식으로 구현되어 있나요?
 
+**면접 세션 피드백 (2026-04-02 5회차)**:
+- 잘한 점: `@Transactional` 예시로 "모든 구현체에서 begin/commit/rollback 직접 호출" 문제 → AOP로 wrapping 해결 설명 정확
+- 보완: "횡단 관심사(Cross-Cutting Concern)" 용어 미사용. AOP = "어노테이션으로 묶은 것"이 아니라 "횡단 관심사 분리 패러다임"이 본질. OOP 한계와 연결 필요.
+
 > 출처: https://docs.spring.io/spring-framework/reference/core/aop/introduction-defn.html
 
 ---
@@ -44,6 +48,11 @@ related: [kotlin, distributed-systems]
 **꼬리 질문 예시:**
 - Pointcut 표현식 `execution(* com.example.service.*.*(..))` 을 해석해주세요.
 - Weaving 시점 3가지를 비교해주세요.
+
+**면접 세션 피드백 (2026-04-02 5회차)**:
+- 보완: Pointcut/JoinPoint 혼동(자주 나오는 실수). Aspect 미언급.
+- 암기 우선: JoinPoint(모든 후보 지점) → Pointcut(선별 표현식) → Advice(코드+시점) → Aspect(둘을 묶은 모듈)
+- 암기 팁: "Join(합류)Point = 합류 가능한 모든 지점, Point(를)cut(잘라서) = 그 중 선택한 것"
 
 > 출처: https://docs.spring.io/spring-framework/reference/core/aop/introduction-defn.html
 
@@ -87,6 +96,11 @@ related: [kotlin, distributed-systems]
 - `@Transactional`이 self-invocation에서 동작하지 않는 이유도 같은 원리인가요?
 - `final` 클래스에 `@Transactional`이 적용되지 않는 이유는?
 
+**면접 세션 피드백 (2026-04-02 5회차)**:
+- 현황: 전혀 몰랐음 → 신규 암기
+- 핵심: Spring AOP = CGLIB 프록시 기반. self-invocation(`this.메서드()`) = 프록시 우회 = AOP 미적용
+- 3가지 케이스: (1)self-invocation → 별도 클래스 분리, (2)final 메서드 → final 제거, (3)new 직접 생성 → Spring Bean 주입 사용
+
 > 출처: https://f-lab.ai/en/insight/spring-interview-preparation-20250124
 
 ---
@@ -109,6 +123,16 @@ related: [kotlin, distributed-systems]
 - 같은 클래스 내 `@Transactional` 메서드를 내부 호출하면 어떻게 되나요?
 - checked exception과 unchecked exception의 rollback 기본 동작 차이는?
 - `REQUIRES_NEW`는 언제 사용하나요? 주의점은?
+
+**면접 세션 피드백 (2026-04-02 3회차 — checked exception rollback)**:
+- 잘한 점: checked/unchecked 이유 정확(개발자 의도 vs 런타임 장애). `rollbackFor = Exception.class` 설정 정확. 꼬리 답변에서 "실패 상태 보존 → 재시도 효율" 실무 관점 강점.
+- 보완:
+  - 핵심 리스크 시나리오 먼저: "PG사 API IOException(checked) 발생 시 rollbackFor 없으면 결제 레코드가 DB에 '처리중'으로 커밋 → 실제 결제 실패와 DB 상태 불일치 → 이중 청구 위험"
+  - 실패 로그 보존 패턴: `REQUIRES_NEW` 별도 트랜잭션으로 실패 기록 저장 → 메인 롤백과 무관하게 실패 이유 보존
+  ```java
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void saveFailureLog(PaymentFailureLog log) { ... }
+  ```
 
 ---
 
@@ -190,3 +214,59 @@ related: [kotlin, distributed-systems]
 - Spring Bean 스코프와 생명주기
 - Java Virtual Thread (Project Loom)
 - 동시성: synchronized, Lock, atomic
+
+---
+
+## Netty의 동작 원리를 설명하고, Event Loop가 무엇인지 설명해주세요.
+
+**난이도**: 심화
+
+**핵심 키워드**: NIO, Reactor 패턴, EventLoopGroup, Channel, ChannelPipeline, Boss/Worker, Non-Blocking I/O
+
+**모범 답변 방향**:
+
+**Netty란**:
+- Java 기반 **비동기 이벤트 기반(Asynchronous Event-Driven) 네트워크 프레임워크**
+- 기존 Java BIO(Blocking I/O): 연결당 스레드 1개 → 연결 수가 많으면 스레드 폭발
+- Netty: NIO 기반 Non-Blocking I/O + Reactor 패턴으로 **적은 스레드로 대량 연결 처리**
+- 사용처: gRPC, Kafka, Elasticsearch, Spring WebFlux 내부 HTTP 서버(reactor-netty)
+
+**Reactor 패턴**:
+- 이벤트 발생 시까지 대기하다가 발생하면 등록된 핸들러에 디스패치하는 패턴
+- 핵심: **I/O 이벤트를 기다리는 스레드(Event Loop)가 블로킹되지 않음**
+
+**Netty 핵심 구조**:
+```
+[Boss EventLoopGroup]     — Accept 전용 (연결 수락)
+       │
+[Worker EventLoopGroup]   — I/O 처리 (읽기/쓰기), CPU 코어 수 × 2 스레드
+       │
+[Channel]                 — 연결된 소켓을 추상화
+       │
+[ChannelPipeline]         — ChannelHandler 체인 (인코딩, 디코딩, 비즈니스 로직)
+```
+
+**Event Loop 동작 원리**:
+1. Selector(NIO)로 I/O 이벤트 감지 (select/epoll)
+2. 이벤트 발생 시 해당 Channel의 ChannelPipeline 통해 Handler 호출
+3. 완료 후 다시 Selector 대기 → **스레드가 블로킹 없이 순환**
+4. 모든 I/O 작업은 비동기 → `ChannelFuture`로 완료 콜백 처리
+
+**Event Loop 사용 시 주의**:
+- **Event Loop 스레드를 절대 블로킹하지 말 것** — DB 쿼리, HTTP 호출 등 블로킹 작업은 별도 스레드 풀로 오프로드
+- 블로킹하면 해당 Loop가 처리하는 모든 Channel이 멈춤
+
+**Spring MVC vs WebFlux 비교**:
+| | Spring MVC | Spring WebFlux |
+|---|---|---|
+| 서버 | Tomcat (BIO/NIO) | Netty (NIO) |
+| 스레드 모델 | 요청당 스레드 | Event Loop (소수 스레드) |
+| 적합 케이스 | CPU Bound, 단순 CRUD | I/O Bound, 대량 동시 연결 |
+
+**꼬리 질문 예시**:
+- Netty에서 CPU Bound 작업(이미지 리사이징 등)을 처리할 때 어떻게 설계해야 하나요?
+- ChannelPipeline의 Inbound/Outbound Handler 차이와 처리 순서는?
+- Spring WebFlux에서 `block()` 호출이 위험한 이유는?
+
+> 출처: https://engineering.linecorp.com/ko/blog/do-not-block-the-event-loop-part3/
+> 출처: https://mark-kim.blog/netty_deepdive_1/

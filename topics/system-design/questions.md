@@ -80,8 +80,53 @@ related: [redis, kafka, kubernetes, golang, distributed-systems]
 
 ---
 
+## API Rate Limiting — Token Bucket vs Sliding Window Log
+
+**난이도**: 기초~중급
+
+**핵심 키워드**: Token Bucket, Sliding Window Log, Fixed Window, Leaky Bucket, Redis Sorted Set, Lua 스크립트, burst, 메모리 트레이드오프
+
+**모범 답변 방향**:
+
+**Token Bucket:**
+- 버킷에 토큰이 일정 속도로 채워짐 (예: 초당 10개)
+- 요청 1건 = 토큰 1개 소비. 토큰 없으면 요청 거부
+- 장점: 순간 burst 허용 (버킷에 쌓인 토큰만큼), 구현 단순
+- 단점: 정확한 요청 수 추적 어려움
+
+**Sliding Window Log:**
+- 요청마다 타임스탬프를 저장
+- 현재 시간 기준 윈도우(예: 1분) 내 요청 수 카운트 → 초과 시 거부
+- 장점: 정확한 요청 수 추적, 경계 시점 burst 없음
+- 단점: 모든 요청 타임스탬프 저장 → 메모리 비용 높음
+
+**Fixed Window 비교:**
+- 가장 단순하지만 경계 시점에 2배 burst 허용 (59초 + 00초에 각 100개)
+
+**실무 구현:**
+```
+Token Bucket → Redis + Lua 스크립트 (원자적 처리)
+Sliding Window Log → Redis Sorted Set (score = timestamp)
+  ZADD key timestamp requestId
+  ZREMRANGEBYSCORE key 0 (now - window)
+  ZCARD key  → 현재 요청 수
+API Gateway → Nginx, Kong, AWS API Gateway 내장 rate limiter 활용
+```
+
+**트레이드오프 한 문장:**
+> "Token Bucket은 burst 허용과 단순 구현이 장점, Sliding Window Log는 정확하지만 메모리 비용. 실무에서는 Redis Sorted Set으로 Sliding Window를 구현하거나 API Gateway 내장 기능 활용."
+
+**꼬리 질문 예시:**
+- "분산 서버 환경에서 rate limit을 어떻게 공유하나요?" → Redis 중앙 집중식 카운터, 또는 각 서버 로컬 카운터 + 주기적 동기화(느슨한 제한 허용)
+- "Redis rate limit에서 race condition은?" → Lua 스크립트로 원자적 처리(EVAL), 또는 INCR + EXPIRE 조합
+
+**면접 세션 피드백 (2026-04-02 2회차)**:
+- 현황: 처음 출제, 전혀 모름 → 신규 암기 최우선
+- 암기 우선순위: Token Bucket(burst 허용) vs Sliding Window Log(정확하지만 메모리 비용) → Redis Sorted Set 구현 패턴
+
+---
+
 ## 작성 예정
 
 - 대용량 파일 업로드 시스템 설계 질문
-- API Rate Limiting 설계 질문
 - 분산 스케줄러 설계 질문

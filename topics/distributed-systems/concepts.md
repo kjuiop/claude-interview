@@ -35,12 +35,12 @@ related: [kafka, redis, zookeeper, kubernetes, mysql, postgresql, system-design]
 |------|--------|------|
 | **CP** | ZooKeeper, HBase, etcd | 파티션 시 쓰기 거부. 리더 선출 중 불가 |
 | **AP** | Cassandra, DynamoDB, CouchDB | 파티션 시 계속 응답. eventual consistency |
-| **CP** | Kafka | 리더 복제 완료 후 커밋 → 일관성 우선 |
-| **AP** | Redis Cluster | 파티션 시 stale 데이터 반환 가능 |
+| **CP** | [[topics/kafka/concepts\|Kafka]] | 리더 복제 완료 후 커밋 → 일관성 우선 |
+| **AP** | [[topics/redis/concepts\|Redis Cluster]] | 파티션 시 stale 데이터 반환 가능 |
 
 ### 이력서 연결
 
 - **ZooKeeper 경험**: CP 시스템. 리더 선출 중 쓰기 불가 → 일관성 우선 선택
-- **Redis**: AP에 가까움. Cluster 파티션 시 stale 데이터 가능 → 캐시 용도에 적합
+- **[[topics/redis/concepts\|Redis]]**: AP에 가까움. Cluster 파티션 시 stale 데이터 가능 → 캐시 용도에 적합
 
 > 참고: [[topics/distributed-systems/questions#cap-정리cap-theorem란-무엇인가요-왜-2개만-선택할-수-있나요]] | [[topics/zookeeper/concepts]]

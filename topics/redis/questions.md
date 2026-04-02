@@ -9,6 +9,196 @@ related: [redis/concepts]
 
 ---
 
+## Redis가 빠른 이유는 무엇인가요? 싱글 스레드인데 어떻게 고성능을 낼 수 있나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: In-Memory, 싱글 스레드, Context Switch, I/O Multiplexing, 원자성
+
+**모범 답변 방향**:
+- **In-Memory**: 디스크 I/O 없이 RAM에서 직접 읽기/쓰기 → 마이크로초 단위 응답
+- **싱글 스레드**: Context Switching 비용 없음, Lock/Deadlock 없음, 명령어 자체가 원자적
+- **I/O Multiplexing**: epoll(Linux) 기반으로 단일 스레드가 수천 개 클라이언트 커넥션을 비동기 처리
+- **단순한 자료구조**: 복잡한 조인 없이 O(1)~O(log N) 연산
+- **결론**: 싱글 스레드 + In-Memory + 비동기 I/O 조합 → 단순 연산에서 초당 수십만 건 처리 가능
+
+**싱글 스레드의 한계**:
+- CPU 코어 1개만 사용 → CPU 병목 발생 시 스케일업이 아닌 Redis Cluster로 수평 확장
+- `KEYS *`, `SMEMBERS`(대형 Set) 등 O(N) 명령어 → 다른 요청 전체 블로킹 → 운영 환경 금지
+- 대안: `SCAN`, `SSCAN`(cursor 기반 분할 조회)
+
+**꼬리 질문 예시**:
+- Redis 6.0+에서 I/O Thread가 추가됐는데 여전히 싱글 스레드라고 할 수 있나요? → 명령어 처리(Command Execution)는 여전히 싱글 스레드. I/O Thread는 네트워크 읽기/쓰기만 담당 → 핵심 처리는 싱글 스레드 보장
+- KEYS * 를 운영 환경에서 쓰면 안 되는 이유는?
+
+> 출처: https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/
+
+---
+
+## Redis의 영속성(Persistence) 옵션을 비교해주세요. 각각 언제 사용하나요?
+
+**난이도**: 중급
+
+**핵심 키워드**: RDB, AOF, No Persistence, BGSAVE, fsync, 데이터 유실
+
+**모범 답변 방향**:
+
+| 방식 | 원리 | 장점 | 단점 |
+|---|---|---|---|
+| **No Persistence** | 메모리만 사용 | 최고 성능 | 재시작 시 전체 유실 |
+| **RDB (Snapshot)** | 주기적으로 fork() + BGSAVE → 바이너리 스냅샷 파일 | 빠른 재시작, 백업 편리 | 주기 사이 데이터 유실 가능 |
+| **AOF (Append Only File)** | 모든 쓰기 명령을 로그로 기록 | 유실 최소화 (최대 1초) | 파일 크기 증가, 재시작 느림 |
+| **RDB + AOF** | 둘 다 활성화 | 재시작 시 AOF로 복구 (더 완전) | 성능 오버헤드 |
+
+**AOF fsync 정책**:
+- `always`: 매 명령마다 fsync → 가장 안전, 성능 최저
+- `everysec`: 1초마다 fsync → **권장** (최대 1초 유실)
+- `no`: OS에 위임 → 성능 최고, 유실 범위 불확실
+
+**선택 기준**:
+- 캐시 전용(유실 허용): No Persistence 또는 RDB만
+- 세션 저장소(유실 최소화): AOF everysec
+- 금융/결제 데이터: RDB + AOF 조합
+
+**꼬리 질문 예시**:
+- RDB 저장 중 서버가 크래시되면 어떻게 되나요? → fork()된 자식 프로세스가 임시 파일에 쓰다가 죽으면 이전 스냅샷이 유지됨 → 마지막 성공 스냅샷으로 복구
+- AOF 파일이 너무 커지면 어떻게 처리하나요? → AOF Rewrite(BGREWRITEAOF): 현재 메모리 상태를 최소 명령어 셋으로 재기록
+
+> 출처: https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+---
+
+## Redis의 메모리 관리와 Eviction 정책을 설명해주세요.
+
+**난이도**: 중급
+
+**핵심 키워드**: maxmemory, Eviction Policy, LRU, LFU, allkeys, volatile, TTL
+
+**모범 답변 방향**:
+- `maxmemory` 도달 시 Redis는 설정된 Eviction 정책에 따라 키 삭제
+- TTL 만료된 키: Lazy(접근 시 삭제) + Active(주기적 샘플링으로 삭제) 병행
+
+**주요 Eviction 정책**:
+
+| 정책 | 대상 | 기준 |
+|---|---|---|
+| `noeviction` | - | 메모리 초과 시 쓰기 오류 반환 |
+| `allkeys-lru` | 전체 키 | 가장 오래 전에 접근된 키 제거 |
+| `allkeys-lfu` | 전체 키 | 가장 적게 접근된 키 제거 |
+| `volatile-lru` | TTL 있는 키만 | 가장 오래 전에 접근된 키 제거 |
+| `volatile-ttl` | TTL 있는 키만 | TTL 짧은 순서로 제거 |
+| `allkeys-random` | 전체 키 | 무작위 제거 |
+
+**실무 선택 기준**:
+- 캐시 전용: `allkeys-lru` 또는 `allkeys-lfu` (접근 빈도 기반이면 lfu 우세)
+- 세션 등 TTL 있는 데이터만: `volatile-lru`
+- 절대 삭제 안 되어야 하는 데이터 포함: `noeviction` + 모니터링
+
+**꼬리 질문 예시**:
+- LRU와 LFU의 차이는? → LRU: 최근성(접근 시점), LFU: 빈도(접근 횟수). LFU가 핫 데이터 보호에 더 적합
+- Redis의 LRU는 정확한 LRU가 아닌데 왜 그런가요? → 성능을 위해 근사 LRU 사용: 랜덤 샘플링(기본 5개)에서 가장 오래된 키 제거 → `maxmemory-samples` 늘리면 정확도 향상
+
+---
+
+## Redis Cache Hit/Miss 비율을 어떻게 관리하고, Cache Miss 시 발생하는 문제를 어떻게 대응하나요?
+
+**난이도**: 중급
+
+**핵심 키워드**: Cache Hit Ratio, Cache Miss, Cache Aside, Cache Penetration, Cache Avalanche, Warm-up
+
+**모범 답변 방향**:
+
+**Cache Hit Ratio 모니터링**:
+- `INFO stats` 명령어: `keyspace_hits`, `keyspace_misses`로 계산
+- Hit Ratio = `keyspace_hits / (keyspace_hits + keyspace_misses)`
+- 일반적으로 80% 이상 유지가 목표
+
+**Cache Miss 유형별 대응**:
+
+| 문제 | 설명 | 대응 |
+|---|---|---|
+| **Cache Penetration** | 존재하지 않는 키 반복 조회 → 항상 DB까지 도달 | Null 캐싱 (짧은 TTL로 "없음" 캐싱), Bloom Filter |
+| **Cache Avalanche** | 다수 캐시 동시 만료 → DB 부하 폭증 | TTL Jitter, 사전 워밍(Cache Warm-up) |
+| **Cache Stampede** | 동시 Miss → 동시 DB 조회 | Mutex Lock, Probabilistic Early Expiration |
+
+**Cache Warm-up 전략**:
+- 배포/재시작 후 주요 데이터 선제 로딩 → Cold Start 방지
+- 트래픽 낮은 시간대에 사전 로딩
+
+**꼬리 질문 예시**:
+- Null 캐싱의 문제점은? → 실제로 데이터가 나중에 생기면 TTL 만료까지 stale "없음" 상태 서빙 → 짧은 TTL + 데이터 생성 시 캐시 무효화 병행 필요
+- Bloom Filter를 캐시와 함께 쓰는 이유는? → 존재하지 않는 키 조회를 Redis/DB 접근 전에 필터링 → Cache Penetration 원천 차단
+
+---
+
+## Java 환경에서 Lettuce와 Redisson 중 어떤 클라이언트를 선택해야 하나요?
+
+**난이도**: 중급
+
+**핵심 키워드**: Lettuce, Redisson, 커넥션 풀, 분산락, Reactive, Pub/Sub
+
+**모범 답변 방향**:
+
+| 항목 | Lettuce | Redisson |
+|---|---|---|
+| 기반 | Netty 비동기 I/O | Netty 비동기 I/O |
+| 커넥션 모델 | 기본 단일 커넥션 공유 (스레드 안전) | 커넥션 풀 |
+| Reactive 지원 | ✅ (Reactor/RxJava) | 제한적 |
+| 분산락 | 직접 구현 필요 | ✅ RLock, RFairLock 내장 |
+| 고수준 추상화 | 낮음 (명령어 레벨) | 높음 (RMap, RQueue 등) |
+| Spring Boot | spring-data-redis 기본 클라이언트 | 별도 의존성 추가 |
+
+**선택 기준**:
+- **Lettuce 선택**: Spring Boot 기본 사용, Reactive WebFlux, 단순 캐싱/조회 → 경량성 우선
+- **Redisson 선택**: 분산락 필요 (Watchdog 내장), 고수준 자료구조 (분산 컬렉션), RateLimiter 필요
+
+**꼬리 질문 예시**:
+- Lettuce가 단일 커넥션을 공유해도 스레드 안전한 이유는? → Netty Event Loop 기반으로 명령어를 직렬화하여 처리 → 명령어 자체는 순차 처리
+- Redisson의 Watchdog이 자동으로 TTL을 연장하는 원리는? → 락 획득 시 별도 스케줄러 실행 → TTL의 1/3 주기마다 연장 요청 → 클라이언트 프로세스 종료 시 자동 중단
+
+> 출처: https://redis.io/docs/latest/develop/clients/
+
+---
+
+## Redis Cluster의 구조와 정족수(Quorum) 기반 장애 허용을 설명해주세요.
+
+**난이도**: 심화
+
+**핵심 키워드**: 16384 슬롯, 해시 슬롯, 정족수, Failover, cluster-require-full-coverage, Sentinel vs Cluster
+
+**모범 답변 방향**:
+
+**슬롯 기반 데이터 분산**:
+- 전체 키를 **16384개 해시 슬롯**으로 분산
+- 키 → `CRC16(key) % 16384` → 해당 슬롯을 담당하는 노드로 라우팅
+- 각 Master 노드가 슬롯 범위를 나눠 담당 (예: 3노드 → 각 약 5461슬롯)
+
+**Failover와 정족수**:
+- 각 Master는 최소 1개 Slave(Replica)를 가짐
+- Master 장애 시: Slave들 중 **과반수(N/2+1) 이상의 Master 투표**를 받아야 새 Master 승격
+- 3 Master 클러스터: 2개 투표 필요 → Master 1개 장애 허용
+- 투표 불성립(네트워크 파티션으로 과반수 연결 불가) → Failover 보류
+
+**`cluster-require-full-coverage` 설정**:
+- `yes`(기본): 슬롯 미커버 상태 → 전체 클러스터 쓰기 거부 → 데이터 안정성 우선
+- `no`: 정상 슬롯에 한해 계속 서비스 → 가용성 우선
+
+**Cluster vs Sentinel 비교**:
+| | Redis Sentinel | Redis Cluster |
+|---|---|---|
+| 목적 | 고가용성(HA) | 수평 확장 + HA |
+| 데이터 분산 | 단일 데이터셋 | 슬롯 기반 분산 |
+| Failover | Sentinel이 모니터링 | 노드 간 자체 감지 |
+| 적합한 상황 | 단일 대용량 데이터, 간단한 HA | 데이터 수평 분산 필요 |
+
+**꼬리 질문 예시**:
+- Redis Cluster에서 MGET을 여러 키에 사용할 때 주의점은? → 다른 슬롯의 키를 한 번에 조회하면 CROSSSLOT 에러 → Hash Tag `{user}:profile`, `{user}:session` 으로 같은 슬롯에 배치
+- Redis Cluster 환경에서 Redlock(분산락)이 안전하지 않은 이유는? → Cluster는 슬롯 단위로 독립적 → Redlock이 가정하는 "N개 독립 노드 과반수 획득"이 Cluster 내에서는 보장되지 않음 → 독립 Redis 인스턴스 N개 필요
+
+> 출처: https://redis.io/docs/latest/operate/oss_and_stack/management/scaling/
+
+---
+
 ## Redis 기본 자료구조 5가지를 각각 언제 사용하나요?
 
 **난이도**: 기초
@@ -163,5 +353,36 @@ related: [redis/concepts]
 - Lua 스크립트에서 롤백이 안 된다면 부분 실행 중 에러 처리는 어떻게 하나요?
 
 > 출처: https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+---
+
+## 인기 상품 캐시 만료 시 Cache Stampede 대응 설계
+
+**난이도**: 심화
+
+**핵심 키워드**: Probabilistic Early Expiration, Mutex Lock, Stale-While-Revalidate, TTL Jitter, Lock TTL + Watchdog
+
+**모범 답변 방향**:
+
+**3가지 이상 전략 및 트레이드오프**:
+
+| 전략 | 원리 | 일관성 | 복잡도 | 메모리 |
+|---|---|---|---|---|
+| **TTL Jitter** | TTL에 랜덤 오프셋 추가 → 만료 시점 분산 | 높음 | 낮음 | 동일 |
+| **Mutex Lock (분산락)** | 첫 요청만 DB 조회, 나머지는 Lock 대기 | 높음 | 중간 | 동일 |
+| **Probabilistic Early Expiration** | TTL 만료 전 확률적으로 선제 갱신 | 높음 | 중간 | 동일 |
+| **Stale-While-Revalidate** | 만료된 캐시라도 즉시 반환 + 백그라운드 갱신 | 낮음(일시적 stale) | 낮음 | 동일 |
+| **로컬 캐시 (L1)** | 앱 서버 메모리에 1차 캐시 → Redis 부하 감소 | 낮음(노드별 차이) | 높음 | 증가 |
+
+**Mutex Lock에서 소유자 장애 대응**:
+- Lock에 TTL 설정 필수 (예: SET lock NX EX 5) → 소유자 장애 시 TTL 만료 후 자동 해제
+- 처리 시간이 TTL을 초과할 수 있는 경우 → **Watchdog 패턴**: 별도 스레드가 주기적으로 Lock TTL 연장
+- Redisson 라이브러리: Watchdog 내장 구현 (기본 30초, 1/3 주기로 연장)
+- 주의: Watchdog도 클라이언트 프로세스 죽으면 연장 중단 → TTL 만료 후 해제됨
+
+**꼬리 질문 예시**:
+- Redis 싱글 스레드 특성이 Mutex Lock 구현에서 어떤 이점을 주나요?
+- Stale-While-Revalidate 방식에서 갱신 실패 시 stale 데이터가 계속 서빙될 수 있는데 어떻게 처리하나요?
+- 분산 환경에서 Redis Cluster를 쓸 때 분산락이 안전하지 않은 이유와 Redlock 알고리즘을 설명해주세요.
 
 ---

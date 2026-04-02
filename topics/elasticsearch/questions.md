@@ -30,6 +30,74 @@ related: [mysql, postgresql]
 - 잘한 점: LIKE 검색의 Full-Text 인덱스 병용 불가 문제, 형태소/오타 검색 강점, 사용 케이스 설명
 - 보완: 역인덱스 구조(Term→Posting List) 설명 누락. "1만 건 이상 느려진다"는 잘못된 정보 — ES는 수억 건 처리용 설계
 
+**면접 세션 피드백 (2026-04-02 1회차)**:
+- 잘한 점: 역인덱스 방향(term → doc ID) 정확히 잡음
+- 보완: Analyzer 파이프라인 순서 오류(Tokenizer가 상위 개념이 아닌 Analyzer 안에 포함됨), Term Dictionary/Posting List 구조 모름
+- 핵심 추가 암기:
+  - Analyzer = Character Filter → Tokenizer → Token Filter (순서 중요)
+  - Term Dictionary: 정렬된 단어 목록, 이진 탐색 O(log n)
+  - Posting List: `(문서ID, 빈도, 위치)` 목록
+  - RDBMS 비교: "LIKE '%케이스%'는 전체 행 순차 스캔 O(n), ES는 Term Dictionary 이진 탐색 O(log n)"
+
+---
+
+## Elasticsearch에서 전문 검색(Full-Text Search)이 동작하는 원리를 설명해주세요.
+
+**난이도**: 중급
+
+**핵심 키워드**: Analyzer, Character Filter, Tokenizer, Token Filter, BM25, TF, IDF, 관련성 점수
+
+**모범 답변 방향**:
+- **색인 시**: 텍스트 → Analyzer 파이프라인(Character Filter → Tokenizer → Token Filter) → 토큰 → 역인덱스 등록
+- **검색 시**: 쿼리도 동일 Analyzer로 분석 → Term Dictionary 이진 탐색 O(log N) → Posting List 조회
+- **관련성 점수**: BM25 알고리즘 — TF(출현 빈도, 포화 적용) × IDF(희소 단어 우대) × 문서 길이 정규화
+- RDBMS LIKE `%keyword%` 비교: Full Scan O(N) vs Term Dictionary 조회 O(log N)
+
+**Analyzer 파이프라인 순서 암기**:
+```
+Character Filter → Tokenizer → Token Filter
+(HTML 제거)        (토큰 분리)   (소문자화/불용어/동의어)
+```
+
+**꼬리 질문 예시**:
+- BM25에서 TF 포화(Saturation)란? → 단어가 많이 나올수록 점수 증가폭이 점점 줄어듦 → 키워드 반복 어뷰징 방지
+- nori analyzer가 필요한 이유는? → 한국어는 공백 기준으로 나누면 복합어/조사 처리 불가 → 형태소 분리 필요
+- `match` 쿼리와 `term` 쿼리의 차이는? → match: Analyzer 적용 후 검색 (전문 검색용), term: Analyzer 없이 정확한 값 비교 (keyword 타입 필터용)
+
+> 출처: https://www.elastic.co/docs/solutions/search/full-text/how-full-text-works
+
+---
+
+## Elasticsearch Hot-Warm-Cold 아키텍처와 ILM을 설명해주세요.
+
+**난이도**: 심화
+
+**핵심 키워드**: Hot/Warm/Cold Phase, ILM, Rollover, Shrink, Forcemerge, Freeze, node.attr, 비용 최적화
+
+**모범 답변 방향**:
+- **배경**: 시계열 데이터(로그/메트릭)는 시간이 지날수록 접근 빈도 감소 → 노드를 성능 등급별 분리
+- **Hot**: 신규 색인 + 활발한 검색 → 고성능 SSD 노드, 우선순위 50
+- **Warm**: 7일 경과 → Shrink(샤드 축소) + Forcemerge(세그먼트 병합) → 중간 사양 노드, 우선순위 25
+- **Cold**: 30일 경과 → Freeze(메모리 해제) → 대용량 저가 노드, 우선순위 0
+- **Delete**: 60일 경과 → 자동 삭제로 저장 비용 관리
+- ILM 정책에서 `min_age` + Action 조합으로 자동 전환
+
+**핵심 Action 암기**:
+
+| Action | 단계 | 효과 |
+|---|---|---|
+| Rollover | Hot | 크기/시간 초과 시 새 인덱스 생성 |
+| Shrink | Warm | 샤드 수 축소 (Primary 1개로) |
+| Forcemerge | Warm | Lucene 세그먼트 병합 → 검색 속도 향상 |
+| Freeze | Cold | 메모리에서 인덱스 제거, 검색 시 on-demand 로드 |
+
+**꼬리 질문 예시**:
+- Forcemerge를 Hot 단계에서 하면 안 되는 이유는? → 색인이 활발한 Hot 단계에서는 지속적으로 새 세그먼트 생성 → Forcemerge 해도 즉시 새 세그먼트 생김. 색인이 끝난 Warm에서 해야 효과적
+- ILM 정책 변경이 기존 인덱스에 즉시 반영되지 않는 이유는? → 현재 단계가 완료되고 다음 단계 전환 시 새 정책 적용. Explain API로 현재 상태 확인 가능
+- Frozen 인덱스 검색 시 첫 쿼리가 느린 이유는? → 메모리에서 언로드된 상태 → 검색 시 on-demand로 다시 로드 → Cold 단계는 낮은 빈도 검색을 전제로 설계
+
+> 출처: https://www.elastic.co/kr/blog/implementing-hot-warm-cold-in-elasticsearch-with-index-lifecycle-management
+
 ---
 
 ## ElasticSearch의 샤드 설계와 성능 튜닝

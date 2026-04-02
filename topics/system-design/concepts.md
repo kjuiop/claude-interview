@@ -16,11 +16,11 @@ related: [redis, kafka, kubernetes, golang, distributed-systems, networking]
 | 컴포넌트 | 선택 | 이유 |
 |---|---|---|
 | 언어 | **Go** | goroutine 2KB, 병렬 WebSocket 처리 특화 |
-| 서버간 브로드캐스트 | **Redis pub/sub** | push 기반, 채팅방 = topic, 낮은 지연 |
-| 메시지 영속 저장 | **MongoDB** | 메타데이터 스키마 유연성, 날짜/채팅방 인덱스 |
-| 오케스트레이션 | **Kubernetes** | active connection 기반 HPA, 수평 확장 |
+| 서버간 브로드캐스트 | **[[topics/redis/concepts\|Redis]] pub/sub** | push 기반, 채팅방 = topic, 낮은 지연 |
+| 메시지 영속 저장 | **[[topics/mongodb/concepts\|MongoDB]]** | 메타데이터 스키마 유연성, 날짜/채팅방 인덱스 |
+| 오케스트레이션 | **[[topics/kubernetes/concepts\|Kubernetes]]** | active connection 기반 HPA, 수평 확장 |
 
-### Redis pub/sub vs Redis Streams
+### [[topics/redis/concepts\|Redis]] pub/sub vs Redis Streams
 
 | | pub/sub | Streams |
 |---|---|---|

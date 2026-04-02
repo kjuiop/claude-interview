@@ -56,6 +56,14 @@ async { }    // Deferred<T> 반환 — .await()로 결과 수신, 병렬 실행 
 - suspend fun 모름 → Continuation/CPS 변환 구조 암기 필요
 - launch(Job, 결과 없음) vs async(Deferred, .await() 필요) 구분 미인지
 
+**면접 세션 피드백 (2026-04-02 1회차 — Dispatcher 심화)**:
+- 잘한 점: Default(CPU코어수), IO(I/O용 대형 풀), Main(UI, 1개) 역할 구분 정확
+- 보완:
+  - IO 스레드 수 수정: "36개" → `max(64, CPU 코어 수)` 가 정확한 기본값
+  - "이벤트 루프" 표현 지양: Kotlin Coroutine은 스레드 풀 기반 (Node.js/Python asyncio와 다름)
+  - Unconfined: "스레드 없음"이 아니라 "시작 스레드에서 실행, 첫 suspend point 이후 재개 스레드에서 계속 → 예측 불가 → 비권장"
+  - Default 블로킹 위험 구체화: 스레드 수 = CPU코어 수 → 하나라도 블로킹되면 스레드 기아 발생
+
 ---
 
 ## 작성 예정

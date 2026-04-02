@@ -212,6 +212,13 @@ sm.Range(func(k, v any) bool {
 **꼬리 질문 예시**:
 - `-race` 플래그로 race condition을 어떻게 검출하나요? (`go test -race ./...`)
 
+**면접 세션 피드백 (2026-04-02 2회차)**:
+- 잘한 점: nil map panic을 "hmap 미할당 → 참조형"으로 정확히 설명. map+mutex 선택 기준(read-modify-write 원자적 보호) 정확.
+- 보완:
+  - hash bucket 구조 미언급: 버킷 1개 = 최대 8개 key-value, 로드팩터 6.5 초과 시 2배 rehash
+  - sync.Map 내부 구조: read map(atomic, lock-free) + dirty map(mutex). read-heavy 최적, write-heavy에서 dirty 승격 오버헤드로 느릴 수 있음
+  - 선택 기준 정리: sync.Map = 읽기 압도적 + 키 변경 드문 경우 / map+RWMutex = 범용, 쓰기 빈번한 경우
+
 ---
 
 ## 참고 링크

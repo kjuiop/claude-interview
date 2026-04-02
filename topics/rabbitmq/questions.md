@@ -33,6 +33,14 @@ related: [kafka, distributed-systems]
 - 잘한 점: Kafka exactly-once 실무 설정 구체적 언급, RabbitMQ 큐 바인딩 유연성 실무 관점 설명
 - 보완: Direct = "1:1"이 아니라 "routing key 완전 일치". Topic = "논리 주제"가 아니라 "와일드카드 패턴 매칭"이 핵심. `independent` → `idempotent producer`, `readcommit` → `isolation.level=read_committed`
 
+**면접 세션 피드백 (2026-04-02 2회차)**:
+- 잘한 점: Topic Exchange dot 구분자 패턴을 실제 예시로 설명
+- 보완:
+  - Direct Exchange 교정: "큐 이름 일치" → "routing key 완전 일치". 큐에 여러 routing key 바인딩 가능 → 1:1 아님
+  - `*` 범위 교정: 단어 **정확히 1개**. `order.*`는 `order.create` 매칭, `order.create.success` 불일치
+  - `#` 신규 암기: **0개 이상** 단어. `order.#`는 `order`, `order.create`, `order.create.success` 모두 매칭
+  - 선택 기준 한 문장: "Direct는 정확한 1:1 라우팅, Topic은 패턴으로 여러 서비스에 유연하게 분배"
+
 ---
 
 ## RabbitMQ Dead Letter Exchange 활용 패턴

@@ -58,6 +58,7 @@ tags: [home, index]
 - [[topics/kafka/concepts]] / [[topics/kafka/questions]]
 - [[topics/rabbitmq/concepts]] / [[topics/rabbitmq/questions]]
 - [[topics/zookeeper/concepts]] / [[topics/zookeeper/questions]]
+- [[topics/aws/concepts]] / [[topics/aws/questions]] — SNS, SQS, Fan-out 패턴
 
 ### Infrastructure
 - [[topics/kubernetes/concepts]] / [[topics/kubernetes/questions]]

@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-01
+updated: 2026-04-02
 ---
 
 # 현재 준비 상태 스냅샷
@@ -27,24 +27,25 @@ updated: 2026-04-01
 |---|---|---|---|
 | golang/goroutine | ★★★★★ | 2026-03-27 | - |
 | golang/channel | ★★★★☆ | 2026-03-27 | select + context 조합 |
-| golang/map | ★★★★☆ | 2026-03-27 | concurrent 접근 패턴 |
+| golang/map | ★★★★☆ | 2026-04-02 | hash bucket 구조 미언급, sync.Map 내부 구조(read+dirty 이중맵) 추가 필요 |
 | golang/interface | ★★★★☆ | 2026-04-01 | Accept interfaces, return structs 관용구, 외부 라이브러리 연동 예시 |
 | golang/error-handling | ★★★★☆ | 2026-03-31 | 도메인 에러 교체(convert) 패턴, gin API 구문 정확도 |
 | golang/clean-architecture | ★★★★☆ | 2026-03-31 | 레이어별 에러 변환 흐름 정착 |
 | golang/hexagonal | ★★★☆☆ | 2026-03-27 | Port/Adapter 실제 코드 작성 |
-| mongodb | ★★★☆☆ | 2026-03-31 | 복합 인덱스 순서, Aggregation Pipeline 개념 |
-| python-fastapi | ★★★☆☆ | 2026-03-31 | asyncio vs goroutine 비교, ProcessPoolExecutor |
-| java/spring | ★★★★☆ | 2026-03-31 | checked exception rollback, 별도 클래스 분리 패턴 |
+| mongodb | ★★★★☆ | 2026-04-02 | Aggregation Pipeline 구조적 추론 가능. `$group` 문법(`$sum: 1`) + `$match` 앞 배치 이유 보완 필요 |
+| python-fastapi | ★★★☆☆ | 2026-04-02 | DI 개념 이해 있음. Depends() yield 패턴(setup/teardown), 요청 스코프 vs @Autowired 싱글톤 차이 암기 필요 |
 | java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
 | networking | ★★★★☆ | 2026-04-01 | TLS Handshake 흐름 2회차에 완전 교정. Client Hello 용어 추가 필요 |
 | mysql | ★★★★☆ | 2026-04-01 | ACID 정의 정확. Next-Key Lock(Gap Lock) Phantom Read 방지 심화 추가 필요 |
 | redis | ★★★★☆ | 2026-04-01 | Hash vs String 선택 기준(메모리 효율, TTL 제한) 보완 필요 |
 | kafka | ★★★☆☆ | 2026-04-01 | Exactly-Once 흐름 교정. sendOffsetsToTransaction 두 실패 케이스 정착 |
-| kotlin | ★★★☆☆ | 2026-04-01 | suspend fun Continuation 미인지, Dispatcher 타입 오개념(싱글스레드 아님) |
+| kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
 | kubernetes | ★★★☆☆ | 2026-04-01 | Pod/Service/Deployment 기본 맞음. Label Selector, Service 타입 추가 필요 |
 | zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
-| distributed-systems | ★★☆☆☆ | 2026-04-01 | CAP 정리 전혀 모름 → 즉시 암기 필요 |
-| elasticsearch | ★★☆☆☆ | - | 전반적으로 부족 |
+| distributed-systems | ★★★☆☆ | 2026-04-02 | CAP 정리 보완 중. Saga 패턴 강점(트레이드오프 설명), 멱등성·Saga Log Table 추가 필요 |
+| elasticsearch | ★★★☆☆ | 2026-04-02 | Term Dictionary/Posting List 구조 모름, Analyzer 파이프라인 순서 오류 교정 필요 |
+| postgresql | ★★★☆☆ | 2026-04-02 | Dead Tuple/VACUUM 전혀 몰랐음. XID Wraparound 신규 암기 최우선 |
+| java/spring | ★★★★★ | 2026-04-02 | AOP 3문제 복습 완료. 횡단 관심사·JoinPoint/Pointcut·self-invocation 모두 교정됨 |
 
 ---
 

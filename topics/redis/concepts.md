@@ -9,6 +9,158 @@ related: [distributed-systems, golang, kubernetes]
 
 ---
 
+## 자료구조 (Data Structures)
+
+| 자료구조 | 내부 인코딩 | 사용 예 | 대표 명령 |
+|---|---|---|---|
+| **String** | Raw / int / embstr | 캐싱, 카운터, 세션 토큰 | GET, SET, INCR, SETNX |
+| **List** | ziplist(소규모) / linkedlist | 작업 큐, 최근 N개 로그 | LPUSH, RPOP, LRANGE |
+| **Hash** | ziplist(128필드↓) / hashtable | 사용자 프로필, 구조체 캐싱 | HSET, HGET, HMGET |
+| **Set** | intset(정수) / hashtable | 태그, 좋아요, 집합 연산 | SADD, SISMEMBER, SINTER |
+| **Sorted Set** | ziplist(128개↓) / skiplist+hashtable | 랭킹, 리더보드, 시간 순 정렬 | ZADD, ZRANGE, ZRANGEBYSCORE |
+| **HyperLogLog** | — | 중복 제거 카운팅 (UV 집계), 오차 0.81% | PFADD, PFCOUNT |
+| **Bitmap** | String 기반 | 일일 출석체크, 기능 플래그 | SETBIT, GETBIT, BITCOUNT |
+
+---
+
+## 싱글 스레드 원리와 원자성
+
+**Redis는 싱글 스레드로 명령을 처리한다.** (정확히는 I/O 처리는 멀티 스레드, 명령 실행만 싱글 스레드 — Redis 6.0+)
+
+### 왜 싱글 스레드인가?
+- **원자성 자동 보장**: 모든 명령이 순차 실행 → Race Condition 없음
+- **Lock 비용 없음**: 멀티스레드의 Mutex/동기화 오버헤드 없음
+- **구현 단순성**: 데이터 구조를 동기화 걱정 없이 단순하게 구현 가능
+- 메모리 연산이 주이므로 CPU 병목 드묾 → 싱글 스레드로도 충분한 처리량
+
+### 원자성이 보장되는 범위
+- **단일 명령**: `INCR`, `SETNX`, `GETSET` 등 → 항상 원자적
+- **Lua 스크립트**: 스크립트 전체가 하나의 원자적 명령으로 실행
+- **MULTI/EXEC**: 큐에 쌓인 명령 일괄 실행 (격리 O, 롤백 X)
+- ⚠️ **Pipeline**: 원자성 보장 없음 — 네트워크 최적화 용도
+
+### 주의: 블로킹 명령
+- `KEYS *`, `SMEMBERS`, `HGETALL` 등 O(N) 명령은 싱글 스레드 블록 → 운영 환경 금지
+- 대안: `SCAN`, `SSCAN`, `HSCAN` (커서 기반 점진적 조회)
+
+---
+
+## 메모리 성능 — 왜 Redis를 쓰는가?
+
+### 인메모리 구조
+- 모든 데이터를 **메모리(RAM)에 저장** → 디스크 I/O 없음
+- 메모리 접근 속도: ~100ns vs 디스크 SSD: ~100μs → **약 1000배 빠름**
+- 단순 Get/Set 기준 **초당 10만~100만 ops** 처리 가능
+
+### 영속성 옵션
+| 방식 | 동작 | 장점 | 단점 |
+|---|---|---|---|
+| **RDB (Snapshot)** | 주기적 스냅샷 파일(.rdb) 저장 | 파일 작음, 복구 빠름 | 마지막 스냅샷 이후 데이터 유실 가능 |
+| **AOF (Append Only File)** | 모든 쓰기 명령을 로그 파일에 append | 데이터 유실 최소화 | 파일 커짐, 재시작 시 복구 느림 |
+| **RDB + AOF 혼합** | 주기 스냅샷 + 그 이후 AOF 로깅 | 빠른 복구 + 최소 유실 | 복잡도 증가 |
+| **No Persistence** | 영속성 없음 | 최고 성능 | 재시작 시 데이터 전부 유실 |
+
+### 메모리 관리 — Eviction Policy
+메모리 한계(`maxmemory`) 도달 시 키 제거 정책:
+
+| 정책 | 동작 |
+|---|---|
+| `noeviction` | 메모리 초과 시 에러 반환 (기본값) |
+| `allkeys-lru` | 전체 키 중 LRU(가장 오래 미사용) 제거 |
+| `volatile-lru` | TTL 있는 키 중 LRU 제거 |
+| `allkeys-lfu` | 전체 키 중 LFU(가장 적게 사용) 제거 |
+| `volatile-ttl` | TTL 가장 짧은 키 먼저 제거 |
+
+- 캐시 용도: `allkeys-lru` 권장
+- 영속 데이터 혼재: `volatile-lru` (TTL 없는 키는 보존)
+
+---
+
+## 캐시 전략 (Cache Strategy)
+
+### Cache Hit / Miss
+- **Cache Hit**: 요청 데이터가 캐시에 존재 → Redis에서 즉시 반환
+- **Cache Miss**: 캐시에 없음 → DB 조회 후 캐시에 저장
+- **Hit Ratio** = Hit / (Hit + Miss) → 높을수록 DB 부하 감소
+
+### 캐시 읽기 전략
+| 전략 | 동작 | 특징 |
+|---|---|---|
+| **Cache-Aside (Lazy Loading)** | Miss 시 앱이 DB 조회 후 캐시 저장 | 가장 일반적. 실제 읽힌 데이터만 캐싱 |
+| **Read-Through** | 캐시가 Miss 시 자동으로 DB 조회 | 앱 코드 단순, 캐시 레이어가 DB 접근 담당 |
+
+### 캐시 쓰기 전략
+| 전략 | 동작 | 일관성 |
+|---|---|---|
+| **Write-Through** | DB와 캐시를 동시에 쓰기 | 높음 (항상 최신) |
+| **Write-Back (Behind)** | 캐시에만 먼저 쓰고 나중에 DB에 반영 | 낮음 (지연 반영), 성능 높음 |
+| **Write-Around** | DB에만 쓰고 캐시는 Miss 시 로드 | 쓰기 직후 읽기는 항상 Miss |
+
+### TTL 설계 원칙
+- 너무 짧으면 → Cache Miss 증가, DB 부하
+- 너무 길면 → 오래된 데이터(Stale) 서빙, 메모리 증가
+- **TTL Jitter**: `ttl = base_ttl + random(0, base_ttl * 0.1)` → 대량 동시 만료 방지
+
+---
+
+## Java 클라이언트 — Lettuce vs Redisson
+
+### Lettuce
+- **Spring Data Redis 기본 클라이언트**
+- Netty 기반 **비동기 Non-Blocking** I/O
+- 단일 커넥션으로 멀티플렉싱 → 커넥션 수 적음
+- Reactive(WebFlux) 지원
+- 기본 기능 충실, 분산락 등 고수준 기능 직접 구현 필요
+
+### Redisson
+- 고수준 분산 객체/서비스 추상화 라이브러리
+- **RLock**: Watchdog + Lua Script 기반 분산락 (TTL 자동 연장)
+- **RMap, RList, RQueue**: Redis 자료구조를 Java 컬렉션처럼 사용
+- 분산 세마포어, Rate Limiter, Pub/Sub 등 고수준 API
+- 내부적으로 Netty + Lettuce 사용, 오버헤드 있음
+
+| 항목 | Lettuce | Redisson |
+|---|---|---|
+| 기반 | Netty 비동기 | Netty + 고수준 추상화 |
+| 분산락 | 직접 구현 (Lua Script) | `RLock` + Watchdog 내장 |
+| 복잡도 | 낮음 | 높음 |
+| 성능 | 더 가벼움 | 기능 많아 약간 무거움 |
+| 선택 기준 | 단순 캐싱, WebFlux | 분산락, 분산 컬렉션 필요 시 |
+
+---
+
+## Redis Cluster
+
+### 구조
+- 데이터를 **16,384개의 해시 슬롯**으로 분할, 각 노드가 슬롯의 일부 담당
+- 최소 **3개 마스터 노드** 권장 (각 마스터에 슬롯 ~5461개씩)
+- 각 마스터에 최소 1개 이상의 레플리카(Replica) 권장
+
+### 정족수(Quorum) — 클러스터 내결함성
+- 클러스터는 **과반수(N/2+1) 마스터 노드가 살아있어야** 정상 동작
+- 마스터 3개 기준: 1개 다운 → 클러스터 유지 / 2개 다운 → 클러스터 중단
+- 마스터 장애 시: 해당 마스터의 레플리카 중 하나가 **자동 Failover**로 마스터 승격
+
+### Fault Tolerance (내결함성)
+```
+마스터3 + 레플리카3 구성 (총 6노드):
+  - 마스터 1개 장애 → 레플리카가 마스터 승격 → 클러스터 계속 동작
+  - 마스터 2개 동시 장애 + 각각의 레플리카 없으면 → 클러스터 중단 (quorum 미달)
+```
+
+- `cluster-require-full-coverage yes` (기본): 일부 슬롯 손실 시 전체 클러스터 중단
+- `cluster-require-full-coverage no`: 일부 슬롯 손실해도 나머지 슬롯은 서비스 지속
+
+### Cluster vs Sentinel
+| | Sentinel | Cluster |
+|---|---|---|
+| 목적 | 단일 마스터 고가용성(HA) | 수평 확장 + HA |
+| 데이터 분산 | 없음 (전체 복제) | 슬롯 기반 분산 |
+| 클라이언트 | Sentinel-aware 필요 | Cluster-aware 필요 |
+| 적합 케이스 | 데이터 양 적고 HA만 필요 | 대용량 데이터, 쓰기 확장 |
+
+---
+
 ## 분산락 (Distributed Lock)
 
 여러 서버/프로세스가 동시에 같은 자원에 접근하지 못하도록 Redis를 이용해 잠금을 거는 패턴.
