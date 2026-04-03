@@ -386,3 +386,111 @@ related: [redis/concepts]
 - 분산 환경에서 Redis Cluster를 쓸 때 분산락이 안전하지 않은 이유와 Redlock 알고리즘을 설명해주세요.
 
 ---
+
+## Redis Sorted Set은 내부적으로 어떻게 구현되어 있나요? ListPack과 SkipList는 언제 각각 사용되나요?
+
+**난이도**: 중급
+
+**핵심 키워드**: ListPack, SkipList, Hashtable, zset-max-listpack-entries, 인코딩 전환, 메모리 vs 성능
+
+**모범 답변 방향**:
+- Sorted Set은 두 가지 내부 인코딩을 상황에 따라 자동 선택
+- **ListPack**: 원소 수 ≤ 128 AND 각 원소 크기 ≤ 64바이트 → 선형 메모리 블록에 순차 저장, 메모리 효율 최고, 조회 O(N)
+- **SkipList + Hashtable**: 위 임계값 초과 → SkipList로 score 기준 정렬 유지(O(log N)), Hashtable로 ZSCORE 조회 O(1)
+- 전환은 **단방향**(ListPack → SkipList). 원소를 지워도 되돌아가지 않음
+- 튜닝: `zset-max-listpack-entries` 값을 올리면 더 오래 ListPack 유지 → 메모리 절약
+
+**꼬리 질문 예시**:
+- ListPack이 Ziplist를 대체한 이유는 무엇인가요? (Cascading Update 문제)
+- `ZSCORE`가 O(1)인 이유는? (Hashtable이 함께 관리되기 때문)
+- 기본 임계값(128개)을 512개로 올리면 어떤 트레이드오프가 생기나요?
+
+> 출처: https://redis.io/docs/latest/develop/data-types/sorted-sets/ | https://jothipn.github.io/2023/04/07/redis-sorted-set.html
+
+---
+
+## Redis SkipList의 O(log N) 성능은 어떻게 달성되나요? Redis가 Red-Black Tree 대신 SkipList를 선택한 이유는?
+
+**난이도**: 심화
+
+**핵심 키워드**: SkipList, 다층 레이어, Span, 범위 조회, O(log N), Red-Black Tree, Express Lane
+
+**모범 답변 방향**:
+
+**O(log N) 원리**:
+- 다층 레이어 구조: 상위 레이어에서 큰 폭으로 건너뛰고, 목표에 가까워질수록 하위 레이어로 내려와 정밀 탐색
+- 삽입 시 확률적(p=0.25)으로 레이어 높이 결정 → 평균 O(log N) 수준의 노드 분포 유지
+
+**Span의 역할**:
+- 각 레이어 포인터에 "건너뛴 노드 수(span)" 저장
+- `ZRANK` 호출 시 HEAD에서 목표 노드까지 span을 누적 → O(log N)에 순위 계산 가능
+- RB-Tree로는 순위 계산에 서브트리 사이즈 메타데이터가 별도 필요
+
+**SkipList 선택 이유**:
+- **범위 조회 용이**: 최하위 레이어가 정렬 연결 리스트 → `ZRANGEBYSCORE`, `ZRANGEBYRANK` 시 연속 스캔
+- **구현 단순**: RB-Tree의 회전/색 변경 로직 불필요
+- **동시성 친화**: Lock-free 구현이 RB-Tree보다 쉬움
+
+**꼬리 질문 예시**:
+- SkipList의 최악의 경우 시간복잡도는? 어떤 상황에서 발생하나요? (O(N) — 모든 노드가 레이어 1만 가질 때. 확률적으로 극히 드묾)
+- `ZRANGE key 0 -1`이 O(N)인 이유는? (전체 원소 반환이므로 출력 크기 자체가 N)
+- Hashtable 없이 SkipList만으로 구현하면 `ZSCORE`의 복잡도는? (O(log N) — SkipList 탐색 필요)
+
+> 출처: https://jothipn.github.io/2023/04/07/redis-sorted-set.html | https://sam-wei.medium.com/deep-dive-into-redis-zset-internals-8d10fa1f674c
+
+---
+
+## Ziplist의 Cascading Update 문제란 무엇이고, ListPack은 어떻게 이를 해결했나요?
+
+**난이도**: 심화
+
+**핵심 키워드**: Ziplist, ListPack, Cascading Update, prevlen, 인코딩, Redis 7.0
+
+**모범 답변 방향**:
+
+**Ziplist의 Cascading Update**:
+- Ziplist의 각 엔트리는 이전 엔트리의 크기(`prevlen`)를 저장 (1바이트 또는 5바이트)
+- 중간 원소의 크기가 변하면(예: 253→254바이트) `prevlen` 필드 크기가 변경됨
+- 그러면 다음 엔트리의 `prevlen`도 업데이트 → 연쇄적으로 뒤 엔트리까지 변경
+- 최악 O(N) 재기록 발생 — 작은 집합 기준이지만 예측 불가 지연
+
+**ListPack의 해결책** (Redis 7.0 이후 기본):
+- `prevlen` 필드 **제거** → 이전 엔트리 크기를 저장하지 않음
+- 대신 각 엔트리 끝에 자신의 길이 정보를 인코딩 → 역방향 스캔도 가능
+- Cascading Update 완전 제거, 헤더도 10바이트 → 6바이트로 축소
+
+**꼬리 질문 예시**:
+- ListPack에서 역방향 스캔은 어떻게 가능한가요? (각 엔트리 끝에 자신의 바이트 수 인코딩 → 포인터를 해당 바이트만큼 뒤로 이동)
+- Redis 7.0 이전 버전에서 Ziplist를 쓰는 코드와의 하위 호환성은 어떻게 처리되나요?
+
+> 출처: https://redis.io/glossary/redis-ziplist/ | https://github.com/antirez/listpack/blob/master/listpack.md
+
+---
+
+---
+
+## Rate Limiting
+
+### Q. API Rate Limiting 알고리즘 중 Token Bucket과 Sliding Window Log를 비교해주세요. 분산 환경에서 Redis로 구현할 때 각각 어떤 자료구조를 사용하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: Token Bucket, Sliding Window Log, SortedSet, Hash/String, burst, O(1) vs O(요청 수)
+
+**모범 답변 방향**:
+- Token Bucket: 일정 속도로 토큰 refill, 요청 시 소비. **burst 허용**. Redis **String/Hash 2필드**(남은 토큰 수 + 마지막 refill 시간) → O(1)
+- Sliding Window Log: 요청마다 timestamp를 **SortedSet**에 기록, window 밖 제거 후 count. **burst 엄격 제어**. → O(요청 수)
+
+**선택 기준**:
+- 메모리 효율 + 적당한 burst 허용 → Token Bucket
+- 정확한 QPS 경계 제어 → Sliding Window Log
+
+**꼬리 질문 예시**:
+- "Token Bucket에서 refill 로직은 어떻게 구현하나요?" → HGETALL로 last_refill 읽고, 경과 시간 × rate로 토큰 계산 후 HSET
+- "Fixed Window Counter와 Sliding Window Log의 차이는?" → Fixed는 경계 시점에 2배 burst 가능, Sliding은 정확
+
+**면접 세션 피드백 (2026-04-03 1회차)**:
+- 두 알고리즘 특징 방향은 맞음
+- Token Bucket Redis 구조 "Set과 count" → String/Hash 2필드로 교정 필요
+- "burst를 방지 못한다" → "burst를 허용하는 설계"로 표현 교정
+- 메모리 트레이드오프 방향: Token Bucket이 효율적(O(1)), Sliding Window Log가 많이 씀(O(요청 수))

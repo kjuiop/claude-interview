@@ -504,6 +504,118 @@ SET {user:123}:lock ""
 
 ---
 
+## Sorted Set 내부 인코딩 구조 — ListPack vs SkipList
+
+Redis Sorted Set은 원소의 개수와 크기에 따라 두 가지 내부 인코딩을 자동으로 선택한다.
+
+### 인코딩 전환 기준
+
+```
+원소 수 ≤ 128 AND 모든 원소 크기 ≤ 64바이트  →  ListPack (구: ziplist)
+위 조건 중 하나라도 초과                        →  SkipList + Hashtable
+```
+
+설정값:
+- `zset-max-listpack-entries` (기본 128): 원소 수 임계값
+- `zset-max-listpack-value` (기본 64): 단일 원소 크기 임계값(바이트)
+
+전환은 단방향(ListPack → SkipList). 원소를 삭제해도 SkipList에서 ListPack으로 되돌아가지 않는다.
+
+---
+
+### ListPack (구: Ziplist)
+
+**구조**: 모든 원소를 **단일 선형 메모리 블록**에 순차 저장.
+
+```
+[header(6바이트)][entry1][entry2]...[entryN][end(0xFF)]
+각 entry: [encoding][length][value]
+```
+
+**특성**:
+- 메모리 효율 최고 — 캐시 친화적 연속 메모리
+- 접근 복잡도: **O(N)** (순차 스캔 필요)
+- 원소 수가 적을 때는 O(N)이어도 실제 성능 충분
+
+**Ziplist의 Cascading Update 문제** (ListPack이 대체한 이유):
+- Ziplist의 각 엔트리는 이전 엔트리의 길이를 저장
+- 중간 원소의 크기가 변하면 이전 길이 필드 크기가 바뀌고, 이것이 연쇄적으로 뒤 엔트리의 이전길이 필드까지 변경 → 최악 O(N) 재기록
+- **ListPack은 이전 엔트리 길이를 저장하지 않음** → Cascading Update 제거
+
+---
+
+### SkipList + Hashtable
+
+**SkipList 구조**: 정렬된 연결 리스트에 **다층 레이어(Express Lane)** 를 추가한 확률적 자료구조.
+
+```
+레이어 4:  HEAD ─────────────────────────── 80 ─── TAIL
+레이어 3:  HEAD ────── 20 ─────────────────── 80 ─── TAIL
+레이어 2:  HEAD ── 10 ─ 20 ──── 40 ──────── 80 ─── TAIL
+레이어 1:  HEAD ─ 5 ─ 10 ─ 20 ─ 30 ─ 40 ─ 50 ─ 80 ─ TAIL  ← 전체 노드
+```
+
+**각 노드의 구성**:
+```c
+typedef struct zskiplistNode {
+    sds ele;           // 멤버 문자열
+    double score;      // 정렬 기준 점수
+    struct zskiplistNode *backward;  // 역방향 포인터 (ZREVRANGE용)
+    struct zskiplistLevel {
+        struct zskiplistNode *forward;  // 다음 노드 포인터
+        unsigned long span;             // 건너뛰는 노드 수 (순위 계산)
+    } level[];  // 각 레이어의 forward + span
+} zskiplistNode;
+```
+
+**Span의 역할**: 다음 노드까지 건너뛴 노드 수를 기록. `ZRANK`(순위 조회) 시 span을 누적해 O(log N)에 순위 계산 가능.
+
+**레이어 높이 결정**: 삽입 시 확률적으로 결정 (p=0.25, 최대 32레이어). 평균 노드 수: O(1/p) = O(4).
+
+**O(log N) 달성 원리**: 상위 레이어에서 큰 폭으로 건너뛰고, 목표에 가까워질수록 낮은 레이어로 내려와 정밀 탐색 → 이진 탐색과 유사한 성능.
+
+**Hashtable 역할**: `score → member` 역방향 조회(`ZSCORE`)를 O(1)에 처리. SkipList만으로는 O(log N).
+
+---
+
+### SkipList vs 이진 탐색 트리(BST/RB-Tree) 선택 이유
+
+Redis가 Red-Black Tree 대신 SkipList를 선택한 이유:
+
+| 항목 | SkipList | Red-Black Tree |
+|---|---|---|
+| 범위 조회(ZRANGE) | 리프 레이어 순차 스캔 → 간단 | In-order traversal → 복잡 |
+| 구현 복잡도 | 낮음 | 높음 (회전, 색 변경) |
+| 메모리 지역성 | 레이어 포인터로 캐시 미스 발생 | 비슷 |
+| 순위 계산 | Span으로 O(log N) | 추가 메타데이터 필요 |
+| 동시성 | Lock-free 구현 용이 | 회전 시 복잡 |
+
+**핵심 이유**: 범위 조회(`ZRANGEBYSCORE`, `ZRANGEBYRANK`)가 Sorted Set의 핵심 연산이며, SkipList의 최하위 레이어가 정렬된 연결 리스트여서 연속 스캔이 자연스럽다.
+
+---
+
+### 메모리 vs 성능 트레이드오프
+
+| | ListPack | SkipList |
+|---|---|---|
+| 메모리 | 최소 (헤더 6바이트) | 노드당 최소 37바이트 오버헤드 |
+| 삽입 복잡도 | O(N) (재메모리화) | O(log N) |
+| 조회 복잡도 | O(N) | O(log N) |
+| 캐시 효율 | 높음 (연속 메모리) | 낮음 (포인터 추적) |
+| 적합 크기 | 128개 이하 소형 | 중·대형 집합 |
+
+**실무 설정 튜닝**:
+- 메모리 최적화 우선 (소규모 데이터): `zset-max-listpack-entries 512`로 올려 더 오래 ListPack 유지
+- 성능 우선 (빠른 랭킹 조회): 기본값(128) 유지 또는 낮춤
+
+> 출처:
+> - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+> - https://jothipn.github.io/2023/04/07/redis-sorted-set.html
+> - https://sam-wei.medium.com/deep-dive-into-redis-zset-internals-8d10fa1f674c
+> - https://github.com/zpoint/Redis-Internals/blob/5.0/Object/zset/zset.md
+
+---
+
 ## Redis Streams vs Pub/Sub
 
 ### 핵심 차이
@@ -566,3 +678,48 @@ events 스트림 → worker 처리 실패 3회 → events_dlq 스트림으로 �
 - 유실 허용 근거: 라이브 채팅은 실시간성 우선
 - 재연결 시 MongoDB에서 최근 N개 메시지 fetch로 보완
 - 유실 불허 시: Redis Streams 또는 Kafka로 전환
+
+
+---
+
+## Rate Limiting — Token Bucket vs Sliding Window Log
+
+→ [[topics/system-design/concepts]] | [[topics/redis/questions#Rate Limiting]]
+
+### Token Bucket
+
+- **원리**: 버킷에 일정 속도로 토큰이 채워지고(refill), 요청 시 토큰 1개 소비. 토큰 없으면 거절.
+- **burst 허용**: 버킷에 남은 토큰 수만큼 순간 burst 허용 (설계상 의도)
+- **Redis 구현**: String 또는 Hash 2필드
+
+```
+# Hash 방식 (userId + path 기준)
+HSET rate:{userId}:{path} remaining 10 last_refill 1712100000
+```
+
+- **메모리**: O(1) — 유저당 2개 값(남은 토큰 수 + 마지막 refill 시간)만 저장
+
+### Sliding Window Log
+
+- **원리**: 요청마다 timestamp를 SortedSet에 기록. 현재 시간 기준으로 window 밖의 오래된 로그 제거 후 count
+- **burst 엄격 제어**: 경계 시점에서도 정확한 count 가능
+- **Redis 구현**: Sorted Set (score = timestamp)
+
+```
+ZADD rate:{userId}:{path} {timestamp} {request_id}
+ZREMRANGEBYSCORE rate:{userId}:{path} 0 {window_start}
+ZCARD rate:{userId}:{path}  # 현재 window 내 요청 수
+```
+
+- **메모리**: O(요청 수) — 모든 timestamp 유지, 트래픽 많을수록 메모리 증가
+
+### 선택 기준
+
+| 기준 | Token Bucket | Sliding Window Log |
+|---|---|---|
+| 메모리 | O(1) — 효율적 | O(요청 수) — 많이 사용 |
+| burst 허용 | ✅ 허용 | ❌ 엄격 제어 |
+| 구현 복잡도 | 낮음 | 높음 |
+| 선택 상황 | 메모리 효율 우선, 적당한 burst 허용 | 정확한 QPS 제어 필요 시 |
+
+> 세션 피드백 (2026-04-03 1회차): Token Bucket → String/Hash 2필드. "burst를 방지 못한다" 아닌 "burst를 허용하는 설계". 메모리 O(1) vs O(요청 수) 방향 주의.

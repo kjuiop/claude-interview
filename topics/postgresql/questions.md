@@ -89,6 +89,12 @@ MySQL MVCC(Undo Log + REPEATABLE READ) → PostgreSQL MVCC(xmin/xmax로 버전 �
 - 현황: 전혀 몰랐음 → 신규 암기 최우선
 - 암기 우선순위: Dead Tuple(MVCC 결과) → VACUUM(재사용 표시) → Autovacuum 없으면 Bloat+오류+XID Wraparound
 
+**면접 세션 피드백 (2026-04-03 1회차)**:
+- VACUUM이 재사용 가능 표시라는 핵심 개념 맞음
+- Dead Tuple이 쿼리 성능에 미치는 영향 누락: **Page Bloat → Seq Scan 시 dead page 읽어야 함 → I/O 증가**
+- VACUUM FULL 위험 이유 오답: "데드락 발생" → **ACCESS EXCLUSIVE LOCK — SELECT조차 블록, 테이블 전체 접근 불가**
+- 대안 pg_repack 미언급: `pg_repack` — Lock 최소화 온라인 재구성, autovacuum threshold 튜닝으로 예방
+
 ---
 
 ## 작성 예정
