@@ -33,6 +33,27 @@ related: [distributed-systems, golang, kafka-rabbitmq]
 
 ---
 
+---
+
+**Q. ZooKeeper Watch 이벤트와 Feature Flag — DB 무중단 마이그레이션 실무 경험**
+
+**Watch 이벤트 동작 원리**:
+- 특정 노드를 감시 등록 → 해당 노드에 변화 발생 시 콜백으로 이벤트 수신
+- **Polling 방식 아님**: 변경이 발생할 때만 이벤트를 서버로 푸시 → 불필요한 네트워크 요청 없음
+- **이벤트 타입**: NodeCreated, NodeDeleted, NodeDataChanged, NodeChildrenChanged
+- **일회성(One-time)**: Watch는 한 번 발동 후 자동 해제 → 지속 감지하려면 이벤트 수신 후 `getData(path, watcher)` 재등록 필요
+
+**Feature Flag 구현 방법**:
+- 설정 저장 노드는 **Persistent 노드**가 맞음 → Ephemeral은 세션 끊기면 노드 자체가 삭제되어 모든 Watch 등록 서버에 NodeDeleted 이벤트 발생 → 예상치 못한 동작
+- 데이터 변경 Watch: `setData()`로 노드 데이터 변경 시 `NodeDataChanged` 이벤트 트리거
+- N대 서버에 동시에 전환 신호 전달 → 일관된 시점에 모든 인스턴스 전환
+
+**면접 세션 피드백 (2026-04-07)**:
+- 잘한 점: Watch polling이 아닌 callback 방식 정확. 실무 맥락(cut-over 동시 전환 필요성) 명확하게 설명. "데이터 변경 Watch"라는 구체적 메커니즘 보완 설명 좋음
+- 보완: Watch 일회성(재등록 패턴) 미언급. `setData()` API 명 미사용. "Ephemeral 노드 타입 상관없다"는 부정확 — Feature Flag에는 Persistent가 적절
+
+---
+
 **Q. ZooKeeper로 Feature Flag를 어떻게 구현했나요?**
 - ZooKeeper Watch로 설정 노드 변경 감지
 - N대 서버에 동시에 전환 신호 전달 → 일관된 시점에 모든 인스턴스 전환

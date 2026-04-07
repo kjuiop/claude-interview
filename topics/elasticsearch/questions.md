@@ -41,6 +41,39 @@ related: [mysql, postgresql]
 
 ---
 
+## Index / Shard / Replica 구조
+
+**난이도**: 기초
+
+**핵심 키워드**: Index, Primary Shard, Replica, Lucene, Small Shard Problem, JVM 힙, 가용성, 읽기 성능, 쓰기 성능
+
+**관계 구조**:
+- **Index**: RDBMS의 Table에 해당하는 논리적 저장 단위. 여러 Shard로 물리 분산됨
+- **Primary Shard**: Index를 물리적으로 분할한 단위. 각 Shard는 독립적인 **Lucene 인스턴스**. **Primary Shard 수는 Index 생성 후 변경 불가** — 변경하려면 Reindex 필요
+- **Replica**: Primary Shard의 복사본. 가용성 + 읽기 성능 목적
+
+**Primary Shard 과다 설정 문제**:
+- 각 Shard = 독립적인 Lucene 인스턴스 → Shard 수만큼 **JVM 힙 메모리 + 파일 핸들 소비**
+- **Small Shard Problem**: 데이터가 적은데 Shard가 많으면 검색 쿼리를 모든 Shard로 분산해야 해 코디네이션 비용이 오히려 증가
+- Elastic 권장: Shard 하나당 **10~50GB** 유지
+
+**Replica 트레이드오프**:
+
+| | 가용성 | 읽기 성능 | 쓰기 성능 |
+|---|---|---|---|
+| Replica 증가 | ↑ (Primary 장애 시 자동 승격) | ↑ (Primary + Replica 분산) | ↓ (모든 Replica에 동기화) |
+| Replica 0 | ↓ (노드 장애 = 데이터 유실) | 그대로 | ↑ |
+
+**꼬리 질문 예시**:
+- Primary Shard 수를 나중에 바꾸고 싶으면 어떻게 하나요? → Reindex(새 Index 생성 후 데이터 이동) 필요
+- Replica 0으로 설정하면 성능은 좋지만 언제 문제가 되나요? → 해당 노드 장애 시 해당 Shard 데이터 유실 → 프로덕션에서 최소 Replica 1 권장
+
+**면접 세션 피드백 (2026-04-07 3회차)**:
+- Index/Shard/Replica 구조 완전 미숙지 상태 → 모범 답변으로 대체
+- 핵심 암기 포인트: Primary Shard = Index 생성 후 변경 불가, Shard 하나당 10~50GB, Replica 증가 = 쓰기↓ 읽기↑
+
+---
+
 ## Elasticsearch에서 전문 검색(Full-Text Search)이 동작하는 원리를 설명해주세요.
 
 **난이도**: 중급

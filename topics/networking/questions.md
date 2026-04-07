@@ -53,6 +53,47 @@ related: [networking/concepts]
 - ❌ "서버가 대칭키로 검증한다" → ✅ 대칭키(세션 키)는 Handshake 마지막에 도출. 키 교환 단계에서는 클라이언트가 서버의 공개키로 암호화
 - ❌ "클라이언트가 인증서를 인증 회사에서 직접 다운로드" → ✅ 서버가 Handshake 중 인증서를 전송. 클라이언트는 OS/브라우저에 사전 설치된 CA 루트 인증서로 신뢰 여부 검증
 
+---
+
+## HTTP 프로토콜 버전과 HOL Blocking
+
+**난이도**: 기초
+
+**핵심 키워드**: HOL Blocking, HTTP/1.1 Pipelining, HTTP/2 Multiplexing, Stream, 인터리브, TCP 레벨 HOL Blocking, QUIC, UDP, 0-RTT, Connection Migration
+
+**HTTP/1.1 — HOL Blocking**:
+- 하나의 TCP 연결에서 요청을 **순서대로(serial)** 처리 → 앞 요청 응답이 느리면 뒤 요청이 전부 대기
+- Pipelining 지원하지만 응답은 반드시 요청 순서 그대로여야 함 → 사실상 HOL Blocking 해결 안 됨
+- 브라우저 우회: 도메인당 TCP 연결 6개 병렬 오픈 → 연결 비용 증가
+- **주의**: 스레드 할당 문제가 아닌 **TCP 연결 내 프로토콜 순서 문제**
+
+**HTTP/2 — Application 레벨 HOL Blocking 해결**:
+- 하나의 TCP 연결에서 여러 **Stream** 병렬 처리
+- 각 Stream은 독립적인 요청/응답 쌍 → 메시지를 **프레임 단위로 쪼개 인터리브(interleave) 전송**
+- 콜백 방식이 아님 — 프레임 수준의 멀티플렉싱
+
+**HTTP/2의 남은 한계 — TCP 레벨 HOL Blocking**:
+- TCP 패킷이 하나 유실 → OS가 재전송을 기다리는 동안 해당 TCP 연결 위 **모든 Stream이 함께 멈춤**
+- Stream이 10개여도 하나의 TCP 패킷 손실에 전부 대기
+
+**HTTP/3 (QUIC) — TCP 레벨 HOL Blocking 해결**:
+- **UDP 기반 QUIC** 프로토콜 사용
+- 각 Stream이 독립적인 흐름 → 하나의 Stream 패킷 유실이 다른 Stream에 영향 없음
+- **0-RTT/1-RTT 연결**: TCP 3-way handshake + TLS를 합산해 연결 수립 시간 단축
+- **Connection Migration**: IP 변경(Wi-Fi → 4G)에도 Connection ID 기반으로 연결 유지
+
+**성능 요약**:
+| | Application HOL | TCP HOL | 연결 비용 |
+|---|---|---|---|
+| HTTP/1.1 | ❌ 있음 | ❌ 있음 | 도메인당 6 TCP 연결 |
+| HTTP/2 | ✅ 해결 | ❌ 여전함 | 1 TCP 연결 |
+| HTTP/3 | ✅ 해결 | ✅ 해결 | 1 QUIC 연결 + 0-RTT |
+
+**면접 세션 피드백 (2026-04-07 3회차)**:
+- HOL Blocking을 스레드 할당 문제로 오해 → 프로토콜 레이어의 순서 문제가 핵심
+- HTTP/2 Multiplexing을 "콜백 방식"으로 설명 → 프레임 단위 인터리브 전송이 정확한 표현
+- HTTP/2의 TCP 레벨 HOL Blocking 한계 + HTTP/3 QUIC 해결 방식 미숙지
+
 > 출처: https://www.cloudflare.com/learning/ssl/what-happens-in-a-tls-handshake/
 
 ---

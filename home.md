@@ -21,6 +21,7 @@ tags: [home, index]
 
 ## 지원 공고
 - [[jobs/whitecube-challengers/job]] — 화이트큐브 챌린저스 백엔드
+- [[jobs/wag-backend/job]] — 와그(WAUG) 백엔드 개발자 (Java/PHP, 서류통과)
 
 ---
 
@@ -62,11 +63,14 @@ tags: [home, index]
 
 ### Infrastructure
 - [[topics/kubernetes/concepts]] / [[topics/kubernetes/questions]]
-- [[topics/networking/concepts]] / [[topics/networking/questions]] — HTTP/HTTPS, TLS, 핸드셰이크
+- [[topics/networking/concepts]] / [[topics/networking/questions]] — HTTP/HTTPS, TLS, 핸드셰이크, HOL Blocking, HTTP/2 Multiplexing, HTTP/3 QUIC
 
 ### Architecture
 - [[topics/distributed-systems/concepts]] / [[topics/distributed-systems/questions]]
 - [[topics/system-design/concepts]] / [[topics/system-design/questions]]
+
+### AI / ML
+- [[topics/ai-stt/concepts]] / [[topics/ai-stt/questions]] — Whisper STT, Groq API, video-ai-stt 프로젝트
 
 ### Tools & Methodology
 - [[topics/claude/concepts]] / [[topics/claude/questions]]

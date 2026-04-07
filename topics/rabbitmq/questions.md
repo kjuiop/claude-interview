@@ -1,6 +1,6 @@
 ---
 tags: [rabbitmq, messaging, amqp, interview-questions]
-related: [kafka, distributed-systems]
+related: [kafka, distributed-systems, aws]
 ---
 
 # RabbitMQ — 면접 예상 질문

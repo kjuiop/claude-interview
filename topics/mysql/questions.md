@@ -88,6 +88,55 @@ related: [postgresql, redis]
 
 ---
 
+## EXPLAIN 실행 계획 분석 — type 컬럼 상세
+
+**난이도**: 기초
+
+**핵심 키워드**: ALL, index, range, ref, eq_ref, const, 인덱스 풀 스캔, Small Shard Problem, 커버링 인덱스
+
+**type 컬럼 성능 순서** (좋음 → 나쁨):
+> `const` > `eq_ref` > `ref` > `range` > `index` > `ALL`
+
+| type | 의미 | 상태 |
+|---|---|---|
+| `const` | PK 또는 UNIQUE INDEX로 정확히 **1행** 조회 (예: `WHERE id = 1`) | 최선 |
+| `eq_ref` | JOIN에서 PK/UNIQUE로 1행 매칭 | 매우 좋음 |
+| `ref` | **비고유(non-unique) 인덱스**로 동등 비교 — 여러 행 매칭 가능 | 양호 |
+| `range` | 인덱스 범위 검색 (BETWEEN, >, <, IN, LIKE 'prefix%') | 양호 |
+| `index` | **인덱스 풀 스캔** — 인덱스 전체를 처음부터 끝까지 읽음 | 주의 |
+| `ALL` | **테이블 풀 스캔** | 즉시 개선 |
+
+**주의: `index` ≠ "인덱스가 잘 적용됐다"**
+- `index`는 인덱스 풀 스캔으로 ALL보다 약간 빠르지만 **여전히 최적화 필요**
+- 대용량 테이블에서는 심각한 성능 저하 유발
+- `range` 이상이 실질적으로 인덱스를 활용하는 상태
+
+**주의: `const` ≠ 커버링 인덱스**
+- `const`: type 컬럼에서 PK/UNIQUE로 1행 조회
+- 커버링 인덱스: `Extra` 컬럼의 `Using index`로 확인
+
+**개선 방법**:
+1. WHERE 절 컬럼에 인덱스 생성
+2. 복합 인덱스: 카디널리티 높은 컬럼을 앞에, 동치 비교(=)를 범위 비교(<, >) 앞에
+3. 함수/형변환으로 인덱스 무력화 제거 (예: `WHERE YEAR(created_at) = 2024` → `WHERE created_at BETWEEN ...`)
+4. 커버링 인덱스로 SELECT 컬럼까지 인덱스에 포함시켜 row 접근 제거
+
+**면접 세션 피드백 (2026-04-07 3회차)**:
+- `index` 타입을 "인덱스가 잘 적용된 상태"로 오해 → 실제로는 인덱스 풀 스캔, 여전히 주의 필요
+- `const` = 커버링 인덱스로 오해 → const는 type 컬럼, 커버링 인덱스는 Extra의 `Using index`
+- `ref` / `eq_ref` 구분 미숙지: ref=비고유 인덱스(여러 행), eq_ref=PK/UNIQUE(1행, JOIN에서)
+
+**면접 세션 피드백 (2026-04-07 4회차 — slow query 디버깅 워크플로우)**:
+- 잘한 점: slow query log 전체 패턴 파악 후 접근 (시니어급 사고). "100ms→3s 급변 = 쿼리 변경 실수" 가설 제시 — 실무 디버깅 경험 증거. ALL/index 위험 인식 정확.
+- 보완:
+  - `type` 컬럼명 명시 필요: "ALL이나 INDEX를 보면" → "`type` 컬럼이 ALL·index이면"
+  - `Extra` 컬럼 추가: `Using filesort`(ORDER BY가 인덱스 미사용으로 별도 정렬), `Using temporary`(GROUP BY/DISTINCT에 임시 테이블) = 위험 신호
+  - `rows` 컬럼: 예상 스캔 행 수, 수십만이면 위험
+  - 인덱스 무력화 패턴 1개 언급: `WHERE YEAR(created_at) = 2024` → `BETWEEN`으로 교체 / 묵시적 형변환 주의
+- 모범 답변 오프닝: *"EXPLAIN의 `type` 컬럼에서 ALL·index가 보이면 즉시 위험. `rows`가 수십만이거나 `Extra`에 Using filesort·Using temporary가 있으면 추가 확인."*
+
+---
+
 ## 데이터베이스 동시성 문제 유형과 트랜잭션 격리 수준으로 어떻게 해결하나요?
 
 **난이도**: 중급

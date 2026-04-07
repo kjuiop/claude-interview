@@ -494,3 +494,72 @@ related: [redis/concepts]
 - Token Bucket Redis 구조 "Set과 count" → String/Hash 2필드로 교정 필요
 - "burst를 방지 못한다" → "burst를 허용하는 설계"로 표현 교정
 - 메모리 트레이드오프 방향: Token Bucket이 효율적(O(1)), Sliding Window Log가 많이 씀(O(요청 수))
+
+---
+
+## Redis 캐싱 전략
+
+### Q. Cache-Aside, Write-Through, Write-Behind의 차이를 설명해주세요. 각 전략에서 캐시-DB 정합성 문제는 언제 발생하고 어떻게 해결하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: Cache-Aside, Write-Through, Write-Behind, Cache Invalidation, Race Condition, AOF/RDB, Write Latency, Cache Pollution, 데이터 유실
+
+**모범 답변 방향**:
+
+| 전략 | 쓰기 주체 | 읽기 흐름 | 정합성 | 주요 리스크 |
+|---|---|---|---|---|
+| **Cache-Aside** | 애플리케이션 | Cache Miss → DB 조회 → 캐시 세팅 | 애플리케이션 관리 | Race Condition (동시 Miss) |
+| **Write-Through** | 캐시→DB 순차 쓰기 | 캐시 항상 최신 | 강함 | Write Latency 증가, Cache Pollution |
+| **Write-Behind** | 캐시 먼저 → 배치로 DB | 캐시 항상 최신 | 약함(비동기) | **캐시 장애 시 데이터 유실** |
+
+**Cache-Aside 정합성 패턴**:
+- DB 업데이트 후 캐시 **Update가 아닌 Invalidate(삭제)** → 다음 Miss 시 DB 재조회로 최신화
+- Update 방식은 Race Condition 더 쉽게 발생 (두 쓰기가 서로 다른 순서로 캐시 업데이트)
+- 동시 Miss 문제 → 분산락으로 첫 요청만 DB 조회
+
+**Write-Through 단점**:
+- **Write Latency 증가**: 캐시 + DB 두 곳 쓰기 → 응답 시간 증가
+- **Cache Pollution**: 한 번도 읽히지 않을 데이터도 캐시 적재 → 메모리 낭비
+- TTL 설정으로 stale 데이터 + Cache Pollution 동시 완화
+
+**Write-Behind 핵심 리스크 및 완화**:
+- **핵심 리스크**: 캐시 장애 시 아직 DB에 반영 못 한 쓰기 데이터 **영구 유실**
+- 완화: **Redis AOF/RDB persistence 활성화** → 재시작 시 미반영 데이터 복구
+- 유실 허용 여부로 판단: 좋아요 수/집계(허용 가능) vs 결제 금액(불가)
+
+**꼬리 질문 예시**:
+- Write-Behind에서 캐시 서버가 죽으면 어떤 문제가 생기나요? → DB 미반영 쓰기 데이터 유실. AOF/RDB로 완화
+- Cache-Aside에서 DB 업데이트 후 캐시를 Delete vs Update 중 어느 것이 안전한가요? → Delete(Invalidation)가 안전. Update는 두 쓰기의 순서 역전 시 stale 데이터 고착 위험
+- Write-Through에서 캐시 쓰기 성공, DB 쓰기 실패 시 어떻게 되나요? → 정합성 불일치 → 트랜잭션/2PC 또는 캐시 롤백 로직 필요
+
+**면접 세션 피드백 (2026-04-07 2회차)**:
+- 잘한 점: 3가지 전략 사용 목적 명확히 구분. Write-Behind 사용 사례(좋아요, 집계, 로그) 구체적. Cache-Aside 동시성 문제 → 분산락 언급 — 실무 감각 좋음
+- 보완: Write-Behind 핵심 리스크("데이터 유실") 미언급. Cache-Aside "캐시에 반영" → Invalidation(삭제)이 정확한 표현. Write-Through 단점: Write Latency 증가 + Cache Pollution 추가 필요
+
+---
+
+## 한정 재고 동시 예약 처리 — Redis + DB 2-레이어 설계
+
+**난이도**: 중급
+
+**핵심 키워드**: Lua script, 원자적 UPDATE, write-around + invalidation, TTL 안전망, Circuit Breaker, oversell
+
+**모범 답변 방향**:
+1. **Redis 레이어 (고속 필터)**: Lua script로 `GET(재고) → 0이면 즉시 실패 → DECR` 원자 처리. Redis 단일 스레드 특성 덕분에 별도 락 불필요. Lua는 조건 확인 + 재고 감소 같은 경량 연산만 수행 (무거운 로직 시 전체 Redis 응답 저하 위험).
+2. **DB 레이어 (최후 방어선)**: `UPDATE ... SET count = count - 1 WHERE id = ? AND count > 0`. InnoDB row-level 배타락으로 동시 UPDATE 직렬화. `updatedRow == 0`이면 예외 실패 처리.
+3. **Redis-DB 불일치 방어**:
+   - 쓰기 순서: **DB UPDATE 먼저 → Redis invalidate** (역순이면 DB 커밋 전 조회 스레드가 stale 값 캐시에 세팅 위험)
+   - DB 커밋 성공 + Redis invalidation 실패 → oversell 위험 → **Redis TTL을 안전망으로 설정** (만료 후 DB에서 재동기)
+   - 용어 주의: 이 쓰기 패턴은 **Cache-Aside(읽기 패턴)가 아님** → "write-around + invalidation" 표현이 정확
+4. **Redis 장애 시 fallback**: Redis bypass → DB 원자적 UPDATE 단독 처리. Circuit Breaker + 모니터링 알림 연계.
+
+**꼬리 질문 예시**:
+- "Lua script 없이 GET + DECR를 따로 실행하면 어떤 문제가 생기나요?" → GET 결과 확인 후 DECR 사이에 다른 요청이 끼어들어 음수 재고 발생 가능
+- "DB TTL 안전망 TTL을 얼마로 설정하나요?" → 예약 처리 최대 시간보다 길게 (예: 5분), 재고 변경 빈도에 따라 조정
+- "Redis 재고가 0인데 DB 재고가 1인 상황은 언제 발생하나요?" → Redis 장애 후 복구, TTL 만료 후 캐시 재적재 전 등
+- "낙관적 락 vs 비관적 락 vs Redis 분산락 중 이 케이스에 Redis를 선택한 이유는?" → 비관적 락은 DB 락 경합으로 처리량 제한, 낙관적 락은 충돌 시 재시도 비용 증가, Redis는 고트래픽 요청을 DB 도달 전에 빠르게 필터링
+
+**면접 세션 피드백 (2026-04-07 1회차)**:
+- 잘한 점: 2-레이어 설계 즉각 제시. DB 원자적 UPDATE 패턴 정확. Lua script + 단일 스레드 원자성 설명 우수. Lua 과부하 주의사항까지 언급. Cache invalidate race condition 직접 짚어낸 점 인상적.
+- 보완: Cache-Aside 용어 오용(읽기 패턴임). DB 커밋 후 Redis invalidation 실패 시 oversell 케이스 누락 → TTL 안전망 언급 필요. Redis 장애 fallback 미언급.

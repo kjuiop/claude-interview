@@ -1,6 +1,49 @@
 ---
-tags: [aws, sns, sqs, 면접질문, messaging]
+tags: [aws, sns, sqs, 면접질문, messaging, vpc, ec2, rds, infrastructure]
 related: [aws/concepts, kafka/questions, rabbitmq/questions]
+---
+
+# AWS 면접 질문
+
+## AWS 백엔드 인프라 아키텍처
+
+### AWS 주요 서비스(EC2, S3, RDS, ElastiCache)의 역할 차이를 설명해주세요. 백엔드 배포 시 일반적인 아키텍처는 어떻게 구성하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: EC2(VM), S3(Object Storage), RDS(Managed RDBMS), ElastiCache(Redis/Memcached), VPC, Public/Private Subnet, ALB, NAT Gateway, Security Group, ASG, Multi-AZ
+
+**모범 답변 방향**:
+- **EC2**: 하이퍼바이저 위에서 실행되는 **가상 머신(VM)**. "물리 서버"가 아님 — 면접에서 주의
+- **S3**: 객체 스토리지. 이미지/로그/영상 저장, 정적 웹사이트 호스팅, 데이터 레이크
+- **RDS**: 패치/백업/복제를 AWS가 관리하는 관계형 DB. MySQL, Aurora, PostgreSQL, Oracle 등 지원
+- **ElastiCache**: Redis 또는 Memcached 엔진의 관리형 캐시. 캐싱 외에 분산락/pub-sub/세션 스토어로도 활용
+
+**일반적인 아키텍처 (트래픽 흐름)**:
+```
+인터넷 → [Internet Gateway] → ALB (Public Subnet)
+         → EC2 (Private Subnet) ← Security Group: ALB SG만 허용
+         → RDS / ElastiCache (Private Subnet)
+Private Subnet → NAT Gateway (Public Subnet) → 인터넷 (아웃바운드)
+```
+
+**핵심 포인트**:
+- **Public Subnet**: ALB, NAT Gateway, Bastion Host
+- **Private Subnet**: EC2, RDS, ElastiCache
+- **Security Group**: ALB SG에서만 EC2 인바운드 허용. "인증·인가"와 다름 — SG는 IP/포트 기반 방화벽
+- **NAT Gateway**: Private Subnet EC2의 아웃바운드(패키지 설치, 외부 API 호출) 통신 담당
+- **ALB 라우팅 기준**: path (`/api/*`), header, host — 지리적 위치 라우팅은 **Route 53**이 담당
+- **ASG**: CPU 사용률, 커스텀 CloudWatch 메트릭 기준으로 최소/최대/희망 인스턴스 수 관리. Multi-AZ 배포로 가용성 확보
+
+**꼬리 질문 예시**:
+- EC2가 외부 npm 패키지를 설치해야 하는데 Private Subnet에 있다면 어떻게 구성하나요? → NAT Gateway
+- ALB에서 특정 경로를 다른 Target Group으로 보내려면? → Listener Rule (path-based routing)
+- Route 53과 ALB의 역할 차이는? → Route 53: DNS 레벨 라우팅(지리, 가중치, Failover). ALB: HTTP 레벨 라우팅(path, header)
+
+**면접 세션 피드백 (2026-04-07)**:
+- 잘한 점: Public/Private 분리 개념, ALB/EC2/RDS 배치 방향 맞음
+- 보완: "물리 서버" → "가상 머신(VM)". "인증·인가" → "Security Group 인바운드 규칙". ALB 지리적 위치 → Route 53. NAT Gateway 미언급. Multi-AZ 미언급
+
 ---
 
 # AWS SNS / SQS 면접 질문

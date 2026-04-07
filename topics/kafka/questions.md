@@ -1,6 +1,6 @@
 ---
 tags: [kafka, messaging, event-streaming, interview-questions]
-related: [rabbitmq, distributed-systems]
+related: [rabbitmq, distributed-systems, aws]
 ---
 
 # Kafka — 면접 예상 질문

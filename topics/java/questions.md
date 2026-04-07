@@ -182,6 +182,14 @@ related: [kotlin, distributed-systems]
   ```
 - Entity 클래스 위에 이름 등록하는 것은 `@NamedEntityGraph` (별도 개념)
 
+**면접 세션 피드백 (2026-04-07 4회차)**:
+- 잘한 점: N+1 정의 정확(101번 쿼리). BatchSize + ID 분리 두 가지 제시. 꼬리질문에서 OOM 위험으로 정확히 교정.
+- 보완:
+  - 초기 답변에서 "10개보다 적은 상품 조회" 오류 주의 → Hibernate는 틀린 결과가 아닌 전체 메모리 적재 후 페이징
+  - Hibernate 경고 암기: `HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory!`
+  - @EntityGraph 누락: Fetch Join과 동일 효과를 어노테이션으로 선언
+  - 세 해결책 트레이드오프 비교: Fetch Join(쿼리 1, 페이징 불가) / ID 분리(쿼리 2, 페이징 가능) / BatchSize(IN 쿼리, 튜닝 필요)
+
 ---
 
 ## @Transactional 을 직접 구현한다면 어떻게 해야 하나요?
