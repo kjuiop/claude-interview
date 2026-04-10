@@ -175,6 +175,10 @@ Private Subnet → NAT Gateway (Public Subnet) → 인터넷 (아웃바운드)
 > 출처: https://aws.amazon.com/ko/blogs/korea/choosing-between-messaging-services-for-serverless-applications/
 > 출처: https://reintech.io/blog/building-resilient-systems-aws-sqs-sns
 
+**면접 세션 피드백 (2026-04-07 3회차)**:
+- 잘한 점: SNS fan-out → 여러 SQS 구독 패턴 즉시 설계. Outbox/Inbox 패턴, 멱등성(MessageDeduplicationId) 언급.
+- 보완: **SQS 핵심 가치** — visibility timeout(처리 중 중복 소비 방지) + DLQ(실패 격리) 반드시 추가. **선택 결론 마무리** — *"와그처럼 이벤트 리플레이 요구사항이 크지 않은 환경에서는 SNS+SQS가 Kafka보다 운영 부담이 적어 적합"*
+
 ---
 
 ## SQS에서 메시지 중복 처리를 방지하려면 어떻게 설계해야 하나요?

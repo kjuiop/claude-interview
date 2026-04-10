@@ -17,6 +17,18 @@ Go의 **경량 스레드**. `go` 키워드로 시작.
 - Go 런타임이 M:N 스케줄링 (N개 goroutine → M개 OS 스레드)
 - **G-P-M 모델**: Goroutine - Processor - Machine(OS thread)
 
+### 💬 면접 답변 형태로 읽기
+
+goroutine은 Go 런타임이 관리하는 경량 스레드입니다. OS 스레드가 보통 1MB의 고정 스택을 갖는 것에 비해, goroutine은 약 2KB에서 시작해 필요에 따라 동적으로 확장됩니다. 이 덕분에 수백만 개의 goroutine을 동시에 생성해도 메모리 부담이 크지 않습니다.
+
+Go의 스케줄링 모델은 G-P-M이라는 세 가지 구성 요소로 이루어집니다. G는 Goroutine으로 실제 실행할 코드와 스택을 담은 단위입니다. P는 Processor로 GOMAXPROCS 개수만큼 존재하는 논리 프로세서이며, 각 P는 Local Run Queue를 보유해 lock 없이 goroutine을 빠르게 꺼낼 수 있습니다. M은 OS 스레드로, 반드시 P를 획득해야만 goroutine을 실행할 수 있습니다. 이 구조에서 N개의 goroutine이 M개의 OS 스레드에 매핑되는 M:N 스케줄링이 이루어집니다.
+
+이 모델의 핵심 메커니즘이 두 가지 있습니다. 첫 번째는 Work Stealing으로, 한 P의 LRQ가 비면 다른 P의 LRQ에서 goroutine을 절반 훔쳐와 CPU 코어를 놀리지 않고 최대한 활용합니다. 두 번째는 syscall 시 P 핸드오프입니다. goroutine이 파일 I/O 같은 blocking syscall에 진입하면 해당 OS 스레드는 블로킹되지만, P는 즉시 다른 M에 넘겨져 나머지 goroutine들이 멈추지 않고 계속 실행됩니다. 이 두 메커니즘 덕분에 Go는 I/O 집약적인 서버 워크로드에서도 높은 처리량을 달성합니다.
+
+goroutine 상태에 대한 흔한 오개념이 있습니다. "모든 goroutine이 park 상태로 대기한다"는 표현은 정확하지 않습니다. goroutine의 상태는 LRQ에서 실행을 기다리는 Runnable, 실제로 CPU를 사용하는 Executing, 그리고 channel이나 syscall 완료를 기다리는 Waiting(parked) 세 가지로 나뉩니다. park는 Waiting 상태에 해당하는 것으로, OS sleep이 아닌 Go 런타임 수준의 상태 전환입니다. park된 goroutine의 M은 다른 G를 계속 실행할 수 있습니다.
+
+goroutine leak은 생성된 goroutine이 종료되지 않고 메모리를 점유하는 현상으로, 실무에서 특히 주의해야 합니다. 주요 원인은 아무도 읽지 않는 channel에 전송하거나, 종료 신호 없는 무한 루프, context 미전파입니다. 방지 방법은 goroutine을 생성할 때 반드시 종료 시점을 설계하는 것으로, `context.Context`를 전달하고 `case <-ctx.Done(): return` 패턴으로 취소 신호를 수신해 종료합니다. 탐지는 테스트 단계에서 `uber-go/goleak`, 운영에서는 `runtime.NumGoroutine()` 메트릭이 선형 증가하는 패턴을 Grafana로 모니터링합니다.
+
 ---
 
 ## G-P-M 스케줄러 상세 구조
@@ -184,54 +196,37 @@ runtime.NumGoroutine()  // 현재 살아있는 goroutine 수
 ## 면접 질문
 
 **Q. Go의 G-P-M 스케줄러 구조를 설명해주세요.**
-- G(Goroutine): ~2KB 경량 스레드, 수백만 개 생성 가능
-- P(Processor): 논리 프로세서. GOMAXPROCS 개수. 각 P는 Local Run Queue 보유
-- M(Machine): OS 스레드. P를 획득해야만 G 실행 가능
-- Goroutine 상태 3가지: **Runnable**(LRQ 대기), **Executing**(CPU 실행 중), **Waiting/parked**(channel/syscall 대기)
-- Work Stealing: P의 LRQ가 비면 다른 P에서 goroutine 훔침 → CPU 낭비 방지
-- Syscall 시 P 핸드오프: blocking syscall 진입 시 P를 다른 M에 넘겨 나머지 goroutine 계속 실행
+
+Go의 G-P-M 스케줄러는 수많은 goroutine을 적은 수의 OS 스레드에 효율적으로 매핑하기 위한 M:N 스케줄링 모델입니다. G는 Goroutine으로 약 2KB의 경량 스택을 가진 실행 단위입니다. OS 스레드가 보통 1MB 스택을 쓰는 것에 비하면 수백 배 작기 때문에 수백만 개도 생성할 수 있습니다. P는 Processor로, GOMAXPROCS 개수만큼 존재하는 논리 프로세서입니다. 각 P는 Local Run Queue를 보유하고 있어 goroutine을 lock 없이 빠르게 꺼낼 수 있습니다. M은 OS 스레드로, 반드시 P를 획득해야만 goroutine을 실행할 수 있습니다. 여기서 중요한 두 가지 메커니즘이 있습니다. 첫 번째는 Work Stealing입니다. P의 LRQ가 비면 다른 P의 LRQ에서 goroutine을 절반 훔쳐와서 CPU 코어를 최대한 활용합니다. 두 번째는 blocking syscall 시 P 핸드오프입니다. goroutine이 파일 I/O 같은 blocking syscall에 진입하면 그 OS 스레드는 블로킹되지만, P는 즉시 다른 M에 넘겨져서 나머지 goroutine들이 멈추지 않고 계속 실행됩니다. 한 가지 자주 나오는 오개념이 있는데, "모든 goroutine이 park 상태로 대기한다"는 표현은 정확하지 않습니다. goroutine 상태는 Runnable(LRQ 대기), Executing(CPU 실행 중), Waiting/parked(채널이나 syscall 대기) 세 가지이고, Runnable과 park는 엄연히 다릅니다.
 
 **⚠️ 자주 나오는 오개념**: "모든 goroutine이 park 상태로 대기한다" → Runnable(LRQ 대기)과 Waiting(park)은 다름. park는 외부 이벤트를 기다리는 상태.
 
 ---
 
 **Q. goroutine과 OS 스레드의 차이는?**
-- OS 스레드: ~1MB 스택, OS가 스케줄링, 컨텍스트 스위칭 비용 큼
-- goroutine: ~2KB 스택 (동적 확장), Go 런타임이 스케줄링, 수백만 개 생성 가능
-- G-P-M 모델: N개 goroutine을 M개 OS 스레드에 M:N 매핑
+
+goroutine과 OS 스레드의 근본적인 차이는 스케줄링 주체와 비용입니다. OS 스레드는 커널이 직접 스케줄링하며 스택 크기가 약 1MB로 고정되어 있고, 컨텍스트 스위칭 시 커널 모드 전환이 발생해 비용이 큽니다. 반면 goroutine은 Go 런타임이 유저 스페이스에서 스케줄링하며, 초기 스택이 약 2KB에서 시작해 필요에 따라 동적으로 확장됩니다. 이 덕분에 수백만 개의 goroutine을 동시에 띄워도 메모리 부담이 적고, 컨텍스트 스위칭도 런타임 수준에서 처리되어 훨씬 가볍습니다. Go의 G-P-M 모델은 N개의 goroutine을 M개의 OS 스레드에 매핑해서 이 둘의 장점을 결합한 구조입니다.
 
 ---
 
 **Q. goroutine leak이 발생하는 상황과 방지 방법은?**
-- 원인: 아무도 읽지 않는 channel에 전송, 종료 신호 없는 무한 루프, context 미전파
-- 방지: context.Context로 취소 신호 전달, select + ctx.Done() 패턴
-- 탐지: `runtime.NumGoroutine()` 모니터링, `uber-go/goleak` 테스트
 
-**모범 답변 (상세):**
+goroutine leak은 생성된 goroutine이 종료되지 않고 메모리를 계속 점유하는 현상입니다. 발생 원인은 크게 세 가지입니다. 첫째, 아무도 읽지 않는 channel에 전송하는 경우입니다. unbuffered channel에 데이터를 보내는 goroutine은 수신자가 나타날 때까지 영원히 블로킹됩니다. 둘째, 종료 신호 없는 무한 루프입니다. `for {}` 로 반복하는 goroutine에 멈추라는 신호를 주지 않으면 프로그램이 살아있는 한 계속 동작합니다. 셋째, context 미전파입니다. 부모 context가 취소됐는데 자식 goroutine이 해당 context를 받지 않으면 취소 신호가 전달되지 않습니다. 방지 방법은 goroutine을 생성할 때 반드시 종료 시점을 설계하는 것입니다. 구체적으로는 `context.Context` 를 goroutine에 전달하고, 내부 select 루프에서 `case <-ctx.Done(): return` 패턴으로 취소 신호를 수신해 종료합니다.
 
-> goroutine leak은 생성된 goroutine이 종료되지 않고 메모리를 계속 점유하는 현상입니다.
->
-> 발생 원인은 크게 세 가지입니다.
-> 첫째, **아무도 읽지 않는 channel에 전송하는 경우**입니다. unbuffered channel에 데이터를 보내는 goroutine은 수신자가 나타날 때까지 영원히 블로킹됩니다.
-> 둘째, **종료 신호 없는 무한 루프**입니다. `for {}` 로 반복하는 goroutine에 멈추라는 신호를 주지 않으면 프로그램이 살아있는 한 계속 동작합니다.
-> 셋째, **context 미전파**입니다. 부모 context가 취소됐는데 자식 goroutine이 해당 context를 받지 않으면 취소 신호가 전달되지 않습니다.
->
-> 방지 방법은 goroutine을 생성할 때 반드시 종료 시점을 설계하는 것입니다.
->
-> ```go
-> func worker(ctx context.Context, ch <-chan Message) {
->     for {
->         select {
->         case msg := <-ch:
->             process(msg)
->         case <-ctx.Done():
->             return  // 취소 신호 수신 → 종료
->         }
->     }
-> }
-> ```
->
-> 탐지: `uber-go/goleak` (테스트), `runtime.NumGoroutine()` + Prometheus (운영)
+```go
+func worker(ctx context.Context, ch <-chan Message) {
+    for {
+        select {
+        case msg := <-ch:
+            process(msg)
+        case <-ctx.Done():
+            return  // 취소 신호 수신 → 종료
+        }
+    }
+}
+```
+
+탐지 측면에서는 테스트 단계에서 `uber-go/goleak` 라이브러리를 활용해 `defer goleak.VerifyNone(t)` 를 붙이면, 테스트 종료 후에도 살아있는 goroutine이 있으면 자동으로 실패 처리됩니다. 운영 환경에서는 `runtime.NumGoroutine()` 을 Prometheus 메트릭으로 노출하고, Grafana 대시보드에서 goroutine 수가 선형적으로 증가하는 패턴이 보이면 leak을 의심합니다.
 
 **꼬리 질문: goroutine leak을 테스트에서 검증하는 방법과, 운영 중 의심할 수 있는 징후는?**
 - 테스트: `uber-go/goleak` — `defer goleak.VerifyNone(t)` 로 테스트 종료 시 잔존 goroutine 감지

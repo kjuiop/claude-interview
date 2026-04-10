@@ -723,3 +723,126 @@ ZCARD rate:{userId}:{path}  # 현재 window 내 요청 수
 | 선택 상황 | 메모리 효율 우선, 적당한 burst 허용 | 정확한 QPS 제어 필요 시 |
 
 > 세션 피드백 (2026-04-03 1회차): Token Bucket → String/Hash 2필드. "burst를 방지 못한다" 아닌 "burst를 허용하는 설계". 메모리 O(1) vs O(요청 수) 방향 주의.
+
+---
+
+## Hash 내부 인코딩 — listpack vs ziplist vs hashtable
+
+Redis Hash는 데이터 크기에 따라 내부 인코딩을 자동으로 전환한다.
+
+### 인코딩 전환 흐름
+
+```
+필드 수 ≤ 128 AND 모든 값 ≤ 64바이트
+    → listpack (Redis 7.0+) / ziplist (Redis 7.0 이전)
+
+임계값 초과
+    → hashtable
+```
+
+설정 키:
+- `hash-max-listpack-entries` (기본: 128) — 필드 수 임계값
+- `hash-max-listpack-value` (기본: 64) — 개별 값 크기(byte) 임계값
+
+### ziplist (Redis 7.0 이전)
+
+연속된 메모리 블록에 항목을 순서대로 저장하는 컴팩트 리스트.
+
+```
+[zlbytes][zltail][zllen][entry1][entry2]...[entryN][zlend]
+```
+
+- 헤더 10바이트: 전체 크기, 마지막 항목 오프셋, 항목 수 포함
+- 각 entry는 **이전 항목의 길이(prevlen)** 를 저장 → 역방향 탐색 가능
+- **캐스케이딩 업데이트(cascading update) 문제**: 중간 항목을 삽입/삭제하면 prevlen이 바뀌고, 그 변경이 이후 모든 항목에 연쇄적으로 전파될 수 있음. 최악의 경우 O(N²) 재작성 발생.
+
+### listpack (Redis 7.0+)
+
+ziplist의 캐스케이딩 업데이트 문제를 해결하기 위해 재설계된 구조.
+
+```
+[total_bytes][num_elements][entry1][entry2]...[entryN][0xFF]
+```
+
+- 헤더 6바이트 (ziplist의 10바이트보다 작음)
+- 각 entry가 **자신의 길이를 entry 끝에 저장** → 역방향 탐색 시 이전 항목 참조 불필요
+- prevlen 없음 → 삽입/삭제 시 다른 항목에 영향 없음 → **O(1) 삽입/삭제**
+- Redis 7.0에서 Hash, List, Sorted Set의 ziplist를 대체
+- Redis 7.2에서 Set에도 적용
+
+### hashtable
+
+임계값 초과 시 자동 전환되는 표준 해시 테이블.
+
+**내부 구조:**
+
+```
+버킷 배열 (bucket array)
+  [0] → dictEntry → dictEntry → nil   (충돌 시 linked list chaining)
+  [1] → nil
+  [2] → dictEntry → nil
+  ...
+  [N] → nil
+```
+
+각 `dictEntry`는 3개의 포인터를 가진다:
+```c
+typedef struct dictEntry {
+    void *key;    // 8바이트 (64bit 환경)
+    void *val;    // 8바이트
+    struct dictEntry *next;  // 8바이트 (chaining용)
+} dictEntry;
+// 합계: 24바이트 — 실제 데이터 없이 포인터만으로 24바이트
+```
+
+**왜 메모리를 더 많이 쓰는가:**
+
+| 항목 | listpack | hashtable |
+|---|---|---|
+| 저장 방식 | 연속 메모리 (포인터 없음) | 버킷 배열 + 각 항목 포인터 3개 |
+| 항목당 오버헤드 | ~0바이트 (길이 정보만) | 최소 24바이트 (key/val/next 포인터) |
+| 빈 버킷 낭비 | 없음 | 있음 (load factor 1.0 이하 시 빈 슬롯 존재) |
+| 키 저장 | 인라인 | SDS (Simple Dynamic String) 헤더 8바이트 + 내용 |
+| 값 저장 | 인라인 | redisObject 헤더 16바이트 + 내용 |
+| 5필드 예시 | ~100~200바이트 | ~500~800바이트 |
+
+**rehashing (점진적 리해싱):**
+- 버킷 수가 항목 수를 초과하면 2배로 확장 (항상 2의 제곱수)
+- 리해싱 중 old/new 두 테이블을 동시에 유지 → 일시적으로 메모리 2배
+- 매 명령 실행 시 일부 버킷씩 점진적으로 이전 (blocking 방지)
+
+### 💬 면접 답변 형태로 읽기
+
+hashtable이 listpack보다 메모리를 많이 쓰는 이유는 포인터 기반 구조 때문입니다. Redis의 hashtable은 버킷 배열과 각 버킷에 연결된 dictEntry 연결 리스트로 구성됩니다. 각 dictEntry는 key 포인터, value 포인터, 충돌 체이닝용 next 포인터 이렇게 3개의 포인터를 가지는데, 64비트 환경에서 포인터 하나가 8바이트이므로 실제 데이터가 아무것도 없어도 항목 하나에 최소 24바이트의 오버헤드가 붙습니다.
+
+여기에 키는 SDS(Simple Dynamic String) 구조체로 감싸져 8바이트 헤더가 추가되고, 값은 redisObject로 감싸져 16바이트 헤더가 추가됩니다. 그리고 버킷 배열은 항상 2의 제곱수로 미리 할당되기 때문에 비어있는 슬롯이 생겨 추가 낭비가 발생합니다.
+
+반면 listpack은 포인터가 전혀 없습니다. 키와 값을 연속된 메모리 블록에 그냥 순서대로 저장하고, 각 항목 앞뒤에 길이 정보를 붙이는 것이 전부입니다. 포인터 오버헤드도, 빈 버킷 낭비도, 별도 구조체 헤더도 없기 때문에 같은 5개 필드 데이터를 저장할 때 hashtable 대비 5~10배 적은 메모리를 사용할 수 있습니다.
+
+그래서 Redis가 소규모 Hash에서 listpack을 쓰는 이유가 바로 이것입니다. 데이터가 작을 때 O(N) 선형 탐색의 비용은 미미한 반면, 메모리 절약 효과가 훨씬 크기 때문입니다. 임계값(필드 128개, 값 64바이트)을 넘어서 데이터가 많아지면 그때부터 O(1) 탐색의 이점이 메모리 비용보다 커지므로 hashtable로 전환합니다.
+
+### 인코딩 확인 방법
+
+```bash
+OBJECT ENCODING user:1001
+# listpack  → 소규모 (임계값 이하)
+# hashtable → 임계값 초과
+```
+
+### 실무 팁
+
+- 사용자 세션 5개 필드 → listpack 인코딩 적용, 메모리 효율 최대
+- 필드를 의도적으로 128개 이하로 유지 → ziplist/listpack 유지
+- 하나의 Hash key에 너무 많은 필드를 넣으면 hashtable 전환 → 메모리 증가
+
+### 💬 면접 답변 형태로 읽기
+
+Redis Hash는 데이터 크기에 따라 내부 인코딩을 자동으로 전환합니다. 필드 수가 128개 이하이고 각 값의 크기가 64바이트 이하일 때는 listpack 인코딩을 사용하고, 이 임계값을 초과하면 hashtable로 전환됩니다.
+
+listpack은 Redis 7.0에서 이전의 ziplist를 대체한 구조입니다. 둘 다 연속된 메모리 블록에 항목을 순서대로 저장하는 컴팩트한 방식인데, ziplist는 각 항목이 **이전 항목의 길이(prevlen)** 를 저장하는 구조였습니다. 이 때문에 중간 항목을 삽입하거나 삭제할 때 prevlen 값이 바뀌고, 그 변경이 이후 모든 항목에 연쇄적으로 전파되는 **캐스케이딩 업데이트 문제**가 있었습니다. 최악의 경우 O(N²) 재작성이 발생할 수 있었습니다.
+
+listpack은 이 문제를 해결하기 위해 각 항목이 자신의 길이를 **항목 끝에** 저장하는 방식으로 변경했습니다. 역방향 탐색 시 이전 항목을 참조하지 않아도 되므로, 삽입·삭제 시 다른 항목에 전혀 영향을 주지 않습니다. 헤더도 10바이트에서 6바이트로 줄었습니다.
+
+메모리 효율 측면에서 listpack은 포인터 오버헤드 없이 연속 메모리에 데이터를 저장하기 때문에 hashtable보다 5~10배 메모리를 절약할 수 있습니다. 사용자 세션처럼 5~10개 필드를 가진 Hash는 listpack 인코딩이 유지되어 메모리 효율이 높습니다. `OBJECT ENCODING key` 명령으로 현재 인코딩을 확인할 수 있습니다.
+
+> 출처: [How Redis Hashes Work Internally](https://oneuptime.com/blog/post/2026-03-31-redis-hashes-work-internally-hashtable-listpack/view) | [listpack spec (antirez)](https://github.com/antirez/listpack/blob/master/listpack.md) | [listpack migration issue](https://github.com/redis/redis/issues/8702)

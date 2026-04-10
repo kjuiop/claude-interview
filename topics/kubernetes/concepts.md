@@ -340,3 +340,173 @@ HTTP 요청도 포함된 전체 TCP 커넥션 수를 기준으로 판단해야 �
 - **하이브리드**: 앱에서 `/drain` 엔드포인트 호출 → OS 명령어로 2차 확인
 
 > 출처: https://raymii.org/s/snippets/Get_number_of_incoming_connections_on_specific_ports_with_ss.html
+
+---
+
+## Istio — Service Mesh 개요
+
+Istio는 Kubernetes 위에서 동작하는 **Service Mesh** 플랫폼이다.
+마이크로서비스 간 통신을 애플리케이션 코드 수정 없이 네트워크 레이어에서 제어한다.
+
+### 구성 요소
+
+| 레이어 | 구성 요소 | 역할 |
+|---|---|---|
+| **Data Plane** | Envoy Proxy (sidecar) | 실제 트래픽 처리, 암호화, 라우팅 |
+| **Control Plane** | Istiod | Envoy 설정 생성·배포, CA(인증서 발급) |
+
+### Istiod 내부 기능
+- **Pilot**: VirtualService, DestinationRule → Envoy xDS 설정으로 변환 후 배포
+- **Citadel**: SPIFFE 기반 X.509 인증서 발급 및 갱신 (mTLS 재료)
+- **Galley**: K8s 리소스 검증
+
+### 💬 면접 답변 형태로 읽기
+
+Istio는 Kubernetes 환경에서 마이크로서비스 간 통신을 코드 수정 없이 제어할 수 있는 Service Mesh 플랫폼입니다. 핵심 구조는 Data Plane과 Control Plane으로 나뉩니다. Data Plane은 각 Pod에 Envoy Proxy를 sidecar로 주입해서 모든 인바운드·아웃바운드 트래픽을 가로채어 처리합니다. Control Plane인 Istiod는 VirtualService, DestinationRule 같은 Istio 리소스를 Envoy 전용 설정으로 변환해 런타임에 배포하고, CA 역할을 해서 각 워크로드에 인증서를 발급합니다. 이를 통해 트래픽 제어, mTLS 자동 암호화, 서킷 브레이커, 분산 트레이싱 같은 기능을 애플리케이션 레이어가 아닌 네트워크 레이어에서 제공합니다.
+
+> 출처: https://velog.io/@beryl/Istio-%EA%B0%9C%EB%85%90
+
+---
+
+## Istio — Envoy Sidecar 주입 및 트래픽 인터셉트
+
+### Sidecar 주입 방식
+
+```yaml
+# 네임스페이스에 라벨만 달면 자동 주입
+kubectl label namespace default istio-injection=enabled
+```
+
+Pod 생성 시 **MutatingWebhookConfiguration**이 작동해서 자동으로 2개 컨테이너 추가:
+1. `istio-init` (init container): iptables 규칙 설정 → 모든 트래픽을 Envoy로 리다이렉트
+2. `istio-proxy` (sidecar): Envoy 프록시 본체
+
+### 트래픽 흐름
+
+```
+[Pod A]                          [Pod B]
+App → Envoy(sidecar) → 네트워크 → Envoy(sidecar) → App
+         ↑                              ↑
+    mTLS 암호화                    mTLS 복호화
+    라우팅 규칙 적용               라우팅 규칙 적용
+    메트릭 수집                    메트릭 수집
+```
+
+애플리케이션 코드는 `localhost`로 통신하는 것처럼 동작 → Envoy가 투명하게 가로채서 처리.
+
+### 💬 면접 답변 형태로 읽기
+
+Envoy sidecar 주입은 네임스페이스에 `istio-injection=enabled` 라벨만 달면 자동으로 동작합니다. Pod가 생성될 때 Istio의 MutatingWebhookConfiguration이 Pod spec을 수정해서 두 가지를 추가합니다. 하나는 init container로서 iptables 규칙을 설정해 모든 트래픽을 Envoy 포트로 리다이렉트하고, 다른 하나는 istio-proxy sidecar로서 실제 Envoy 프록시입니다. 이렇게 하면 애플리케이션 코드는 마치 직접 통신하는 것처럼 작성하면 되고, 실제 네트워크 트래픽은 Envoy를 통해 흐르면서 mTLS 암호화, 트래픽 라우팅, 메트릭 수집이 투명하게 처리됩니다. 서비스 A가 서비스 B를 호출하면, A의 Envoy → 암호화 → 네트워크 → B의 Envoy → 복호화 → B 앱 순서로 흐릅니다.
+
+> 출처: https://oneuptime.com/blog/post/2026-02-24-understand-envoy-proxy-architecture-in-istio/view
+
+---
+
+## Istio — mTLS 자동 적용
+
+Istio는 서비스 간 통신에 **mTLS(mutual TLS)** 를 자동으로 적용한다.
+애플리케이션 코드 수정 없이 서비스 간 암호화 + 상호 인증이 가능하다.
+
+### 동작 원리
+
+```
+Istiod (CA 역할)
+  └─ 각 워크로드에 SPIFFE 기반 X.509 인증서 발급
+       └─ Envoy가 자동으로 인증서 갱신, TLS 핸드셰이크, 암호화 처리
+```
+
+### PeerAuthentication 설정
+
+```yaml
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: default
+spec:
+  mtls:
+    mode: STRICT   # STRICT: mTLS 강제, PERMISSIVE: HTTP도 허용
+```
+
+- **STRICT**: 모든 트래픽 mTLS 필수 — 인증서 없는 요청 차단
+- **PERMISSIVE**: mTLS + 일반 HTTP 모두 허용 — 마이그레이션 기간에 사용
+
+### K8s NetworkPolicy와의 차이
+
+| | K8s NetworkPolicy | Istio mTLS |
+|---|---|---|
+| 레이어 | L4 (IP/포트 기반) | L7 (서비스 신원 기반) |
+| 제어 수준 | "이 포트로 오는 트래픽 허용/차단" | "이 서비스 신원의 요청만 허용" |
+| 암호화 | 없음 | TLS 자동 암호화 |
+| 코드 수정 | 불필요 | 불필요 |
+
+### 💬 면접 답변 형태로 읽기
+
+Istio의 mTLS는 서비스 간 통신에 상호 TLS 인증을 자동으로 적용하는 기능입니다. Kubernetes의 NetworkPolicy가 IP와 포트 기반의 L4 레이어에서만 트래픽을 제어하는 반면, Istio의 mTLS는 L7 레이어에서 서비스 신원 자체를 기반으로 인증합니다. 동작 원리는 Istiod가 CA 역할을 해서 각 워크로드에 SPIFFE 표준 기반의 X.509 인증서를 발급하고, 각 Pod의 Envoy sidecar가 이 인증서로 TLS 핸드셰이크와 암호화를 자동으로 처리합니다. 개발자는 코드를 한 줄도 수정하지 않아도 됩니다. PeerAuthentication 리소스에서 mode를 STRICT로 설정하면 인증서가 없는 요청은 자동으로 차단되고, PERMISSIVE 모드는 기존 서비스를 점진적으로 마이그레이션할 때 사용합니다. 이를 통해 클러스터 내부에서도 Zero Trust 보안 모델을 달성할 수 있습니다.
+
+> 출처: https://oneuptime.com/blog/post/2026-01-07-istio-mtls-security/view
+
+---
+
+## Istio — 트래픽 관리 (VirtualService / DestinationRule)
+
+### VirtualService — 라우팅 규칙
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: my-service
+spec:
+  hosts:
+  - my-service
+  http:
+  - match:
+    - headers:
+        x-version:
+          exact: "v2"
+    route:
+    - destination:
+        host: my-service
+        subset: v2
+  - route:
+    - destination:
+        host: my-service
+        subset: v1
+      weight: 90
+    - destination:
+        host: my-service
+        subset: v2
+      weight: 10
+```
+
+- 헤더 기반 라우팅, 가중치 기반 트래픽 분할(Canary)
+- 재시도, 타임아웃, Fault Injection 설정 가능
+
+### DestinationRule — 서브셋 정의
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: my-service
+spec:
+  host: my-service
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 100   # 서킷 브레이커
+```
+
+### 💬 면접 답변 형태로 읽기
+
+Istio의 트래픽 관리는 VirtualService와 DestinationRule 두 리소스가 짝을 이루어 동작합니다. VirtualService는 "어디로 보낼지" 라우팅 규칙을 정의하는데, 헤더 값이나 URL 패턴에 따라 다른 버전으로 보내거나, 가중치를 설정해 90%는 v1, 10%는 v2로 보내는 Canary 배포를 구현할 수 있습니다. DestinationRule은 "대상의 세부 정책"을 정의해서 Pod를 버전별 subset으로 나누고, 서킷 브레이커나 커넥션 풀 설정을 적용합니다. Kubernetes의 기본 Service는 단순히 Label Selector로 Pod를 선택해 부하를 분산하는 수준인데, Istio를 쓰면 코드 수정 없이 훨씬 세밀한 트래픽 제어가 가능합니다. 실무에서는 신규 버전 배포 시 VirtualService의 weight를 조금씩 늘려가면서 안정성을 확인하는 방식으로 사용합니다.
+
+> 출처: https://gruuuuu.hololy.org/cloud/service-mesh-istio/

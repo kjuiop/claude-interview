@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-02
+updated: 2026-04-10
 ---
 
 # 현재 준비 상태 스냅샷
@@ -14,8 +14,8 @@ updated: 2026-04-02
 
 | 회사 | 포지션 | 마지막 세션 | 상태 |
 |---|---|---|---|
-| 화이트큐브 | 챌린저스 백엔드 | 2026-03-31 | 준비 중 |
-| wag | 백엔드 | 2026-03-31 | 준비 중 |
+| 화이트큐브 | 챌린저스 백엔드 | 2026-04-10 | 준비 중 |
+| 넵튠 | 솔루션개발실 백엔드 | 2026-04-10 | 신규 등록 |
 
 ---
 
@@ -26,21 +26,21 @@ updated: 2026-04-02
 | 기술 | 수준 | 마지막 확인 | 취약 포인트 |
 |---|---|---|---|
 | golang/goroutine | ★★★★★ | 2026-03-27 | - |
-| golang/channel | ★★★★☆ | 2026-03-27 | select + context 조합 |
+| golang/channel | ★★★★★ | 2026-04-10 | 2회차 복습에서 모든 오개념 교정 완료. nil channel 동적 비활성화 패턴 구체 예시 추가 필요 |
 | golang/map | ★★★★☆ | 2026-04-02 | hash bucket 구조 미언급, sync.Map 내부 구조(read+dirty 이중맵) 추가 필요 |
 | golang/interface | ★★★★☆ | 2026-04-01 | Accept interfaces, return structs 관용구, 외부 라이브러리 연동 예시 |
-| golang/error-handling | ★★★★☆ | 2026-03-31 | 도메인 에러 교체(convert) 패턴, gin API 구문 정확도 |
+| golang/error-handling | ★★★★☆ | 2026-04-10 | gin 구문 `c.JSON(http.StatusXxx, gin.H{"error":"..."})` 반복 오류 — 구문 암기 최우선 |
 | golang/clean-architecture | ★★★★☆ | 2026-03-31 | 레이어별 에러 변환 흐름 정착 |
 | golang/hexagonal | ★★★☆☆ | 2026-03-27 | Port/Adapter 실제 코드 작성 |
 | mongodb | ★★★★☆ | 2026-04-02 | Aggregation Pipeline 구조적 추론 가능. `$group` 문법(`$sum: 1`) + `$match` 앞 배치 이유 보완 필요 |
 | python-fastapi | ★★★☆☆ | 2026-04-02 | DI 개념 이해 있음. Depends() yield 패턴(setup/teardown), 요청 스코프 vs @Autowired 싱글톤 차이 암기 필요 |
 | java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
-| networking | ★★★★☆ | 2026-04-01 | TLS Handshake 흐름 2회차에 완전 교정. Client Hello 용어 추가 필요 |
-| mysql | ★★★★☆ | 2026-04-01 | ACID 정의 정확. Next-Key Lock(Gap Lock) Phantom Read 방지 심화 추가 필요 |
-| redis | ★★★★☆ | 2026-04-01 | Hash vs String 선택 기준(메모리 효율, TTL 제한) 보완 필요 |
-| kafka | ★★★☆☆ | 2026-04-01 | Exactly-Once 흐름 교정. sendOffsetsToTransaction 두 실패 케이스 정착 |
+| networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
+| mysql | ★★★★☆ | 2026-04-10 | 복합 인덱스 순서·커버링 인덱스 정확. 인덱스 무력화 원인 정밀화 필요 — 함수 적용 시 범위 조건 변환(`>= AND <`), LIKE 앞 와일드카드 |
+| redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
+| kafka | ★★★★☆ | 2026-04-10 | at-least-once + DLQ 흐름 정확. commitSync vs commitAsync 트레이드오프 미언급 — 처리량/정확성 기준 선택 보완 필요 |
 | kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
-| kubernetes | ★★★☆☆ | 2026-04-01 | Pod/Service/Deployment 기본 맞음. Label Selector, Service 타입 추가 필요 |
+| kubernetes | ★★★☆☆ | 2026-04-10 | Istio 개념 정리 완료(Envoy sidecar, mTLS, VirtualService). Ambient Mode(sidecar-less) 심화 필요 |
 | zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
 | distributed-systems | ★★★☆☆ | 2026-04-02 | CAP 정리 보완 중. Saga 패턴 강점(트레이드오프 설명), 멱등성·Saga Log Table 추가 필요 |
 | elasticsearch | ★★★☆☆ | 2026-04-02 | Term Dictionary/Posting List 구조 모름, Analyzer 파이프라인 순서 오류 교정 필요 |
@@ -51,12 +51,13 @@ updated: 2026-04-02
 
 ## 다음 우선순위
 
-1. `distributed-systems` (CAP 정리) — 오늘 세션에서 전혀 모름. 즉시 암기 최우선
-2. `kotlin` — suspend fun Continuation, Dispatcher 타입, launch vs async 오개념 교정
-3. `kubernetes` — Label Selector, Service 타입(ClusterIP/NodePort/LoadBalancer)
-4. `redis` — Hash vs String 선택 기준 심화, 각 자료구조 패턴
+1. `kubernetes/Istio` — Ambient Mode(sidecar-less, Istio 1.24+) 심화 암기
+2. `networking` — Forward Secrecy(ECDHE ephemeral key pair 생성 원리) 완성
+3. `distributed-systems` — CAP 정리 보완, Saga 패턴
+4. `kotlin` — suspend fun Continuation, Dispatcher 타입
 5. `elasticsearch` — 공고 요구사항, 미정리
-6. `golang/hexagonal` — 실제 코드 작성 연습 필요
+6. `golang/hexagonal` — Port/Adapter 실제 코드 작성
+7. `system-design/rate-limiting` — Token Bucket refill rate, Sorted Set score=timestamp 구조 암기
 
 ---
 
@@ -64,8 +65,9 @@ updated: 2026-04-02
 
 | 회사 | 세션 수 | 마지막 피드백 요약 |
 |---|---|---|
-| 화이트큐브 | 2 | Go 에러 핸들링, MongoDB, Python FastAPI — 실무 기반 설명 강점 |
-| wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 |
+| 화이트큐브 | 7 | 오늘 5회차 세션 — channel/error-handling 오개념 교정, Istio 신규 학습. 광고 파이프라인 설계 강점 |
+| 넵튠 | 3 | 오늘 세션 포함 — Kafka offset, 광고 파이프라인, Rate Limiting |
+| wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---
 

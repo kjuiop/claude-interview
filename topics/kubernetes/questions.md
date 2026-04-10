@@ -139,3 +139,57 @@ preStop:
 > 출처: https://oneuptime.com/blog/post/2026-02-09-prestop-hooks-zero-connection-drop/view
 
 ---
+
+## Istio가 무엇인지 설명해주시고, Kubernetes NetworkPolicy와 어떤 차이가 있는지 말씀해 주세요.
+
+**난이도**: 중급
+
+**핵심 키워드**: Service Mesh, Envoy sidecar, Data Plane, Control Plane, Istiod, mTLS, L4 vs L7
+
+**모범 답변 (1분 이상 말하기 형태)**:
+> Istio는 Kubernetes 환경에서 마이크로서비스 간 통신을 코드 수정 없이 제어하는 Service Mesh 플랫폼입니다. 구조는 Data Plane과 Control Plane으로 나뉩니다. Data Plane은 각 Pod에 Envoy Proxy를 sidecar로 자동 주입해서 모든 인바운드·아웃바운드 트래픽을 투명하게 가로챕니다. Control Plane인 Istiod는 VirtualService 같은 Istio 리소스를 Envoy 설정으로 변환해 배포하고, CA 역할로 각 워크로드에 인증서를 발급합니다. Kubernetes의 NetworkPolicy는 IP와 포트 기반의 L4 레이어에서만 트래픽을 허용·차단합니다. "이 포트로 오는 트래픽은 허용" 수준입니다. 반면 Istio의 mTLS는 L7 레이어에서 서비스 신원 자체를 기반으로 인증하기 때문에, "이 인증서를 가진 서비스의 요청만 허용"이 가능하고 통신이 자동으로 암호화됩니다. 또한 Istio는 트래픽 라우팅, 서킷 브레이커, 분산 트레이싱, 가중치 기반 Canary 배포도 코드 수정 없이 리소스 선언만으로 적용할 수 있다는 점이 큰 차이입니다.
+
+**꼬리 질문 예시**:
+- Envoy sidecar는 어떻게 자동으로 주입되나요?
+- mTLS의 STRICT 모드와 PERMISSIVE 모드 차이는 무엇인가요?
+- Istio 없이 서킷 브레이커를 구현하려면 어떻게 해야 하나요?
+
+> 출처: https://velog.io/@beryl/Istio-%EA%B0%9C%EB%85%90
+
+---
+
+## Istio에서 mTLS가 자동으로 동작하는 원리를 설명해주세요.
+
+**난이도**: 심화
+
+**핵심 키워드**: Istiod, SPIFFE, X.509, PeerAuthentication, STRICT/PERMISSIVE, Zero Trust
+
+**모범 답변 (1분 이상 말하기 형태)**:
+> Istio의 mTLS는 상호 TLS 인증으로, 서비스 A와 B가 통신할 때 서로의 신원을 인증서로 검증하고 통신을 암호화하는 방식입니다. 동작 원리는 Istiod가 CA 역할을 해서 각 워크로드에 SPIFFE 표준 기반의 X.509 인증서를 발급하는 것에서 시작합니다. 각 Pod의 Envoy sidecar가 이 인증서를 받아서 다른 서비스와 통신할 때 TLS 핸드셰이크를 자동으로 수행합니다. 애플리케이션 코드는 여전히 HTTP로 localhost에 요청하는 것처럼 작성하면 되고, Envoy가 투명하게 가로채서 mTLS로 변환합니다. PeerAuthentication 리소스에서 mode를 STRICT로 설정하면 인증서가 없는 일반 HTTP 요청은 자동으로 차단됩니다. PERMISSIVE 모드는 mTLS와 HTTP를 모두 허용하는데, 기존 서비스를 Istio로 점진적으로 마이그레이션할 때 과도기적으로 사용합니다. 이를 통해 클러스터 내부 통신도 Zero Trust 보안 모델로 구성할 수 있고, 개발자는 TLS 코드를 한 줄도 작성하지 않아도 됩니다.
+
+**꼬리 질문 예시**:
+- SPIFFE가 무엇인지 아시나요?
+- 인증서가 만료되면 어떻게 갱신되나요? (Istiod가 자동 갱신)
+- Istio mTLS와 애플리케이션 레벨 TLS를 동시에 쓰면 이중 암호화가 되나요?
+
+> 출처: https://oneuptime.com/blog/post/2026-01-07-istio-mtls-security/view
+
+---
+
+## Istio의 VirtualService와 DestinationRule을 사용해서 Canary 배포를 어떻게 구현하나요?
+
+**난이도**: 심화
+
+**핵심 키워드**: VirtualService, DestinationRule, subset, weight, 가중치 기반 라우팅, 헤더 기반 라우팅
+
+**모범 답변 (1분 이상 말하기 형태)**:
+> Istio에서 Canary 배포는 VirtualService와 DestinationRule을 조합해서 구현합니다. 먼저 DestinationRule로 동일한 Service를 버전별 subset으로 나눕니다. v1 라벨을 가진 Pod는 v1 subset, v2 라벨을 가진 Pod는 v2 subset으로 분류합니다. 그런 다음 VirtualService에서 가중치를 지정합니다. 처음에는 v1에 90%, v2에 10%를 보내다가, v2가 안정적으로 동작하는 것을 확인하면 점진적으로 비율을 올립니다. Kubernetes 기본 기능만으로 Canary를 하려면 v1과 v2 Deployment의 replica 수 비율을 조정해야 하는데, 이는 파드 수와 트래픽 비율이 연동되어 세밀한 제어가 어렵습니다. Istio를 쓰면 replica 수와 무관하게 정확히 10%의 트래픽만 v2로 보낼 수 있습니다. 또한 헤더 기반 라우팅도 가능해서, x-version: v2 헤더를 가진 요청만 v2로 보내는 방식으로 QA 팀이 프로덕션 환경에서 새 버전을 먼저 테스트할 수도 있습니다.
+
+**꼬리 질문 예시**:
+- Istio 없이 Kubernetes에서 Canary 배포를 구현하면 어떤 한계가 있나요?
+- 트래픽 비율을 바꿀 때 서비스 재시작 없이 적용이 되나요? (VirtualService 수정만으로 즉시 적용)
+- 서킷 브레이커는 어떤 리소스로 설정하나요? (DestinationRule의 outlierDetection)
+
+> 출처: https://gruuuuu.hololy.org/cloud/service-mesh-istio/
+
+---
