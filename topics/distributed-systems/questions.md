@@ -9,20 +9,56 @@ related: [kafka, redis, zookeeper, kubernetes, mysql, postgresql, system-design]
 
 ---
 
+## 2PC (Two-Phase Commit)
+
+### Q. 2PC 동작 원리와 Blocking 문제, 실무에서 Saga 패턴을 선택하는 기준을 설명해주세요.
+
+**등장인물:** Coordinator(진행자) + Participant(각 DB/서비스)
+
+**Phase 1 — Prepare:**
+```
+Coordinator → 모든 Participant: "커밋 가능하냐?"
+Participant → 트랜잭션 준비 + 락 잡고 대기
+Participant → Coordinator: "OK" or "NO"
+```
+
+**Phase 2 — Commit:**
+```
+모두 OK → Coordinator: "커밋해라"
+하나라도 NO → Coordinator: "롤백해라"
+```
+
+**Blocking 문제 (핵심 약점):**
+- 모든 Participant가 OK를 보낸 상태에서 **Coordinator가 죽으면**
+- Participant들이 락을 잡은 채로 커밋/롤백 결정 못함 → 무한 대기
+- 다른 트랜잭션이 같은 데이터 접근 시 전부 대기 → 처리량 급락
+
+**3PC:** Coordinator 없이 Participant끼리 결정할 수 있는 단계 추가 → Blocking 부분 해결. 네트워크 분리 상황에서는 여전히 불일치 가능.
+
+**2PC vs Saga 선택 기준:**
+
+| | 2PC | Saga |
+|---|---|---|
+| 락 | 전체 트랜잭션 동안 유지 | 없음 |
+| Coordinator 장애 | Blocking | 영향 없음 |
+| 일관성 | 강한 일관성(ACID) | 최종 일관성 |
+| 롤백 | 자동 | 보상 트랜잭션 직접 구현 |
+| 적합 환경 | 단일 DB, XA 지원 DB ≤2개, 짧은 트랜잭션 | MSA, 긴 트랜잭션, 가용성 우선 |
+
+**면접 세션 피드백 (2026-04-12 4회차)**:
+- 처음 접한 주제 — Phase 1/2 흐름 + Blocking 원인 암기 필요
+- Saga 선택 이유(DB 부하) 방향은 알고 있었음 → 락 경합 + Blocking + MSA 환경으로 구체화 필요
+
+---
+
 ## CAP 정리(CAP Theorem)란 무엇인가요? 왜 2개만 선택할 수 있나요?
 
 **난이도**: 기초
 
 **핵심 키워드**: Consistency, Availability, Partition Tolerance, CP, AP, ZooKeeper, Cassandra
 
-**모범 답변 방향**:
-- **C (Consistency)**: 모든 노드가 동시에 같은 데이터를 봄. 쓰기 후 읽기 시 항상 최신값 반환
-- **A (Availability)**: 모든 요청에 응답 반환 (오류 없이). 단, 최신 데이터가 아닐 수 있음
-- **P (Partition Tolerance)**: 네트워크 단절이 발생해도 시스템이 계속 동작
-- **왜 2개만**: 네트워크 파티션은 실제로 반드시 발생 → P는 포기 불가 → CP 또는 AP만 선택
-- **CP 예시**: ZooKeeper, HBase — 파티션 시 일관성 유지, 일부 응답 거부
-- **AP 예시**: Cassandra, DynamoDB — 파티션 시 계속 응답, stale 데이터 가능
-- **이력서 연결**: ZooKeeper는 CP 시스템. 리더 선출 중 쓰기 불가 → 일관성 우선
+**모범 답변**:
+CAP 정리는 분산 시스템에서 Consistency, Availability, Partition Tolerance 세 가지 속성을 동시에 모두 보장할 수 없다는 이론입니다. 각 속성의 의미를 정확히 구분하는 것이 중요합니다. Consistency는 모든 노드가 동시에 동일한 데이터를 보는 것으로, 쓰기 이후의 읽기는 반드시 최신값을 반환해야 합니다. Availability는 어떤 요청에도 오류 없이 응답을 돌려준다는 것이고, 다만 그 값이 최신값이 아닐 수 있습니다. Partition Tolerance는 네트워크 단절이 발생하더라도 시스템이 계속 동작하는 능력입니다. 세 가지 중 두 개만 선택할 수밖에 없는 이유는 P의 특수성 때문입니다. 실제 분산 환경에서 네트워크 파티션은 언제든 발생할 수 있고, 이를 아예 포기한 시스템은 분산 시스템이라 부르기 어렵습니다. 따라서 P는 사실상 필수이고, 결국 선택지는 CP와 AP 두 가지가 됩니다. CP 시스템인 ZooKeeper나 HBase는 파티션이 발생하면 일부 요청에 응답을 거부하더라도 데이터 일관성을 지킵니다. 반면 AP 시스템인 Cassandra나 DynamoDB는 파티션 상황에서도 계속 응답하지만, 노드 간 동기화가 완료되기 전의 stale 데이터를 반환할 수 있습니다. 샵라이브에서 실시간 라이브 스트리밍 서비스를 운영할 때 ZooKeeper를 사용했는데, 이것이 CP 시스템임을 이해하고 있었기 때문에 리더 선출 중 쓰기가 잠시 거부되는 상황을 예상하고 재시도 로직을 설계할 수 있었습니다. CP와 AP 중 어느 쪽을 선택하느냐는 서비스의 특성에 달려 있는데, 금융이나 예약처럼 데이터 정합성이 비즈니스 핵심인 경우에는 CP를, 좋아요 수나 조회수처럼 약간의 불일치가 허용되는 경우에는 AP를 선택하는 것이 일반적인 판단 기준입니다.
 
 **꼬리 질문 예시**:
 - Redis는 CAP에서 어느 쪽인가요? (AP에 가까움 — 파티션 시 stale 데이터 가능)

@@ -9,17 +9,45 @@ related: [kubernetes/concepts]
 
 ---
 
+## StatefulSet vs Deployment
+
+### Q. StatefulSet과 Deployment의 핵심 차이를 설명하고, Kafka/MySQL을 K8s에서 운영할 때 StatefulSet을 선택해야 하는 이유를 설명해주세요.
+
+| | Deployment | StatefulSet |
+|---|---|---|
+| Pod 이름 | 랜덤(`app-7d4b9c-xkz2p`) | 고정(`app-0`, `app-1`, `app-2`) |
+| DNS | 없음 (Service IP) | 고정(`app-0.app.ns.svc.cluster.local`) |
+| 배포/종료 순서 | 동시 | 순서 보장 (0→1→2 배포, 2→1→0 종료) |
+| 스토리지 | Pod 재시작 시 데이터 소실 | PVC 영구 바인딩, 재시작 후에도 유지 |
+
+**PVC 바인딩 방식:**
+- `volumeClaimTemplates`로 Pod마다 PVC 자동 생성
+- `app-0 → pvc-app-0`, `app-1 → pvc-app-1` 독립 바인딩
+- Pod 재시작해도 같은 PVC 재바인딩 → 데이터 유지
+
+**Kafka StatefulSet 필요 이유:**
+- 브로커마다 고유한 `broker.id` 필요 → Pod 이름 고정 필요
+- 파티션 데이터가 특정 브로커 디스크에 저장 → PVC 고정 필요
+- Pod 이름 랜덤하면 재시작 후 데이터 정합성 깨짐
+
+**MySQL StatefulSet 필요 이유:**
+- Primary는 항상 `mysql-0`으로 고정
+- Replica가 `mysql-0.mysql` 고정 DNS로 binlog 수신
+
+**면접 세션 피드백 (2026-04-12 4회차)**:
+- 처음 접한 주제 — 위 구조 전체 암기 필요
+- 이력서 K8s 실운영 경험 연결: Kafka StatefulSet volumeClaimTemplates 구성 방식 설명 가능해야 함
+
+---
+
 ## Kubernetes에서 서비스 무중단 배포를 보장하기 위해 어떤 전략을 사용했나요? HPA는 어떤 기준으로 설정하나요?
 
 **난이도**: 심화
 
 **핵심 키워드**: Rolling Update, maxUnavailable, maxSurge, readinessProbe, PodDisruptionBudget, HPA
 
-**모범 답변 방향**:
-- Rolling Update 전략 + `maxUnavailable: 0, maxSurge: 1` 설정 이유 설명
-- readinessProbe가 무중단 배포의 핵심인 이유 (없으면 초기화 중 트래픽 유입)
-- PDB로 노드 점검 중 최소 가용 Pod 보장
-- HPA: k6 부하 테스트로 CPU 임계치 측정 후 70~80% 기준 설정 (이력서 k6 경험 연결)
+**모범 답변**:
+무중단 배포의 핵심은 Rolling Update 전략과 readinessProbe의 조합입니다. Rolling Update를 사용할 때 `maxUnavailable: 0, maxSurge: 1`로 설정하는 이유는, 기존 Pod를 종료하기 전에 반드시 새 Pod가 먼저 준비 완료 상태가 되도록 강제하기 위해서입니다. 이 설정 없이 기본값을 쓰면 배포 중에 가용 Pod 수가 일시적으로 줄어들 수 있습니다. readinessProbe는 그 자체로 무중단 배포의 게이트 역할을 합니다. 새 Pod가 뜨더라도 readinessProbe가 성공하기 전까지는 Service의 엔드포인트에 등록되지 않기 때문에, 애플리케이션이 초기화 중인 상태에서 트래픽이 유입되는 문제를 차단할 수 있습니다. 카테노이드에서 채팅 서버를 운영할 때 초기화 시간이 있는 서비스에 readinessProbe를 적용하지 않으면 503이 간헐적으로 발생하는 것을 경험했고, 그 이후부터는 모든 서비스에 readinessProbe를 기본으로 붙이는 것을 팀 컨벤션으로 정착시켰습니다. 노드 점검이나 스케일다운 상황에서는 PodDisruptionBudget을 활용해 최소 가용 Pod 수를 보장합니다. PDB는 eviction API 수준에서 동작하는 안전장치로, `kubectl drain` 실행 시 minAvailable 조건을 위반하는 eviction은 자동으로 차단됩니다. HPA의 CPU 임계치는 이론값이 아니라 실측값으로 잡는 것이 중요합니다. k6로 부하 테스트를 수행해 트래픽이 점진적으로 증가할 때 CPU 사용률이 어떻게 변화하는지 p95/p99 기준으로 측정한 뒤, 그 값의 70~80% 수준에서 임계치를 설정했습니다. 너무 낮게 잡으면 불필요한 scale-out이 잦아지고, 너무 높게 잡으면 트래픽 급증 시 scale-out 반응 전에 서비스가 포화 상태가 됩니다.
 
 **꼬리 질문 예시**:
 - readinessProbe와 livenessProbe의 차이는 무엇인가요?

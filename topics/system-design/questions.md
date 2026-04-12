@@ -9,6 +9,45 @@ related: [redis, kafka, kubernetes, golang, distributed-systems]
 
 ---
 
+## CQRS (Command Query Responsibility Segregation)
+
+### Q. CQRS 패턴을 설명하고, 두 모델 간 동기화와 Eventual Consistency 허용 시 stale 대응 방법을 설명해주세요.
+
+**핵심 답변 포인트:**
+
+**분리 레벨 (면접관이 기대하는 수준)**
+- 코드 레벨: 같은 DB, Command/Query 처리 경로만 분리
+- 저장소 레벨: 쓰기 DB(PostgreSQL) + 읽기 DB(Redis/Elasticsearch) 물리적 분리
+
+**이점:**
+- 읽기 저장소만 수평 확장 → 비용 효율적
+- 쓰기는 트랜잭션/정합성 우선 스펙 집중, 읽기는 트래픽에 맞게 분산
+
+**동기화 패턴 (이름 함께 언급):**
+- **Event-Driven CQRS**: 쓰기 모델 → Kafka 이벤트 발행 → 읽기 모델 구독·업데이트
+- **CDC(Change Data Capture)**: Debezium이 binlog 캡처 → 읽기 저장소 반영
+
+**stale 데이터 대응 (4가지):**
+1. 정합성 중요 데이터(결제·잔액) → **Command DB에서 직접 읽기**
+2. 지연 허용 데이터 → **"반영까지 N초 소요" 사용자 안내**
+3. **Optimistic Update**: 클라이언트가 쓰기 결과를 즉시 UI에 반영, 이후 서버 확인으로 보정
+4. 쓰기 응답에 **버전/타임스탬프 포함** → 클라이언트가 해당 버전 이상 요청(read-your-writes)
+
+**이력서 연결:**
+> "카테노이드 채팅 서버에서 메시지 저장은 PostgreSQL에 쓰고, 채팅방 목록/최근 메시지 미리보기는 Redis에 캐시하는 구조로 분리했다면 5,000 동시접속에서 가장 빈번한 조회 트래픽을 Command DB와 분리해 부하를 줄일 수 있었을 것입니다."
+
+**꼬리 질문 대비:**
+- "CQRS와 Event Sourcing의 차이는?" → Event Sourcing은 상태 대신 이벤트 자체를 저장. CQRS는 읽기/쓰기 분리만. 같이 쓰는 경우 많지만 별개 패턴.
+- "읽기 모델이 stale할 때 언제 직접 읽기를 허용하고 언제 안 하나요?" → 비즈니스 중요도 기준. 과금·재고·잔액은 직접 읽기, 피드·조회수는 eventual 허용.
+
+**면접 세션 피드백 (2026-04-12 3회차)**:
+- 저장소 분리 이점, binlog CDC 동기화 언급 좋음
+- stale 대응 패턴을 "Command DB 직접 조회" 하나만 언급 → 4가지 패턴 암기 필요
+- 동기화 방식에 Event-Driven CQRS, CDC 패턴 이름 미언급
+- 이력서 채팅 서버 연결 누락 패턴 반복 → 면접 중 의식적으로 연결 시도 필요
+
+---
+
 ## 대용량 실시간 채팅 시스템 설계
 
 ### Q. 동시 시청자 10만 명이 참여하는 라이브 스트리밍 채팅 시스템을 처음부터 설계한다면 어떤 아키텍처를 선택하시겠나요?
@@ -35,8 +74,15 @@ related: [redis, kafka, kubernetes, golang, distributed-systems]
 - "Pod 교체 시 WebSocket은 어떻게 처리하나요?" → terminationGracePeriodSeconds + preStop hook
 - "10만 명을 단일 채팅방 vs 여러 채팅방으로 나눌 때 차이는?" → 단일 채팅방: 모든 서버가 동일 topic 구독, 브로드캐스트 부하 집중
 
-**모범 답변 구조:**
-기술 선택 + 이유 → Redis pub/sub(빠른 브로드캐스트, 유실 허용 + MongoDB fallback) → MongoDB(스키마 유연성 + 인덱스) → K8s(HPA + graceful shutdown)
+**모범 답변:**
+
+동시 시청자 10만 명 규모의 라이브 스트리밍 채팅을 설계한다면, 언어 선택부터 시작합니다. Go는 goroutine 하나가 2KB 수준의 메모리만 사용하기 때문에 수만 개의 WebSocket 커넥션을 단일 서버에서 병렬로 유지할 수 있습니다. 샵라이브에서 라이브 스트리밍 채팅을 다루면서 대규모 동시 커넥션 처리가 언어 선택에 직결된다는 걸 경험했습니다.
+
+서버 간 브로드캐스트는 Redis pub/sub으로 처리합니다. 채팅방 하나를 Redis topic 하나에 대응시키면, 어느 서버에 연결된 사용자든 같은 채팅방 메시지를 받을 수 있습니다. Redis pub/sub은 push 기반이라 지연이 낮고 구현이 단순합니다. 다만 메시지 유실 가능성이 있는데, 라이브 채팅은 실시간성이 우선이므로 이는 허용 가능한 트레이드오프입니다. 유실을 보완하기 위해 재연결 시 MongoDB에서 최근 N개 메시지를 fetch하는 fallback을 둡니다. 순서 보장이나 유실 불허가 요구되는 경우라면 Redis Streams(`XADD`/`XREAD`)나 Kafka로 전환합니다.
+
+메시지 영속 저장에는 MongoDB를 사용합니다. 채팅 메시지는 유형마다 포함 필드가 다를 수 있어 유연 스키마가 유리하고, `{ roomId, createdAt }` 복합 인덱스로 채팅방별 시간순 조회도 효율적으로 처리됩니다. 카테노이드에서 5,000 동시접속 채팅 서버에 MongoDB를 적용한 경험이 있어, 이 패턴의 동작을 실제로 확인했습니다.
+
+인프라는 Kubernetes 위에서 운영하며, active connection 수 또는 CPU 기준으로 HPA를 설정해 트래픽 급증에 자동 대응합니다. Pod 교체 시 WebSocket 커넥션이 갑자기 끊기지 않도록 `terminationGracePeriodSeconds`와 `preStop hook`을 설정해 graceful shutdown을 구현합니다. readinessProbe가 실패하면 새 트래픽을 받지 않고, 기존 커넥션은 grace period 동안 자연스럽게 종료되도록 합니다.
 
 ---
 
@@ -46,24 +92,15 @@ related: [redis, kafka, kubernetes, golang, distributed-systems]
 
 **핵심 키워드**: WebSocket 수평 확장, Redis pub/sub, Hot Partition, Consistent Hashing, Sequence Number, 재연결, Graceful Shutdown
 
-**모범 답변 방향 (전체 흐름):**
+**모범 답변:**
 
-1. **용량 계산 먼저**: 서버 1대 ≈ 5~8만 커넥션 안정 처리. 10만이면 3대(장애 대비). 메모리보다 CPU가 병목.
+10만 동시접속을 설계할 때 가장 먼저 하는 것은 용량 계산입니다. Go 기반 WebSocket 서버는 goroutine 하나가 2KB로 경량이기 때문에 서버 1대가 5~8만 커넥션을 안정적으로 처리할 수 있습니다. 10만이면 서버 2대로 수용 가능하지만 장애 대비 여유를 포함해 최소 3대로 시작하고, HPA로 자동 스케일을 구성합니다. CPU보다 goroutine 스케줄러 포화가 먼저 병목이 되는 경우가 많으므로 active connection 수를 함께 메트릭으로 설정합니다.
 
-2. **핵심 아키텍처**:
-   - WebSocket 서버 (Go): goroutine 2KB, 대규모 커넥션 병렬 처리
-   - Redis pub/sub: 서버 간 브로드캐스트 (채팅방 = topic)
-   - MongoDB: 메시지 영속 저장 + 재연결 시 히스토리 fetch
-   - K8s: CPU/active connection 기반 HPA + Graceful Shutdown
+아키텍처는 세 레이어로 구성합니다. 첫 번째는 WebSocket 서버 레이어입니다. Go의 goroutine 모델 덕분에 대규모 커넥션을 적은 스레드로 병렬 처리할 수 있고, 카테노이드 채팅 서버에서 5,000 동시접속을 Go로 운영한 경험이 이 선택의 근거입니다. 두 번째는 서버 간 브로드캐스트 레이어로 Redis pub/sub을 사용합니다. 채팅방 하나를 Redis topic으로 매핑해서, 어느 서버에 붙은 사용자든 같은 채팅방 메시지를 받습니다. Redis pub/sub은 메시지를 구독자에게 push하기 때문에 지연이 낮습니다. 유실 가능성이 있지만, 라이브 채팅처럼 실시간성이 우선인 경우에는 허용 가능한 트레이드오프이며, 재연결 시 MongoDB에서 최근 메시지를 fetch하는 fallback으로 보완합니다. 세 번째는 영속 저장 레이어로 MongoDB를 사용합니다. `{ roomId, createdAt }` 복합 인덱스로 채팅방별 시간순 조회를 효율적으로 처리하고, 메시지 유형마다 다른 필드 구조도 유연 스키마로 수용합니다.
 
-3. **트레이드오프 명시**:
-   - Redis pub/sub → 유실 허용, 재연결 시 MongoDB fallback
-   - 히스토리/순서 보장 필요하면 Kafka로 전환
+트레이드오프 측면에서, 히스토리 보장이나 메시지 손실 불허가 요구된다면 Redis pub/sub 대신 Kafka로 전환합니다. 이 경우 room_id를 파티션 키로 써서 같은 채팅방 메시지가 같은 파티션에 들어가도록 하면 순서를 보장할 수 있습니다.
 
-4. **심화 포인트 (꼬리 질문 대비)**:
-   - Hot Partition → Consistent Hashing + 채팅방 자동 분할
-   - 메시지 순서 → room_id 기반 Kafka 파티셔닝 또는 Sequence Number
-   - 재연결 → lastSeq 기억 → MongoDB에서 미수신 메시지 보충 + 지수 백오프
+심화 상황으로 Hot Partition 문제가 생기면 Consistent Hashing으로 채팅방을 여러 서버에 분산하고, 인기 채팅방은 자동 분할합니다. 재연결 처리는 클라이언트가 lastSeq를 로컬에 저장하고, 재연결 시 서버에 전달하면 서버가 MongoDB에서 해당 시퀀스 이후 메시지를 fetch해서 보충합니다. 재연결 자체는 지수 백오프를 적용해 서버에 재연결 폭풍이 쏠리는 것을 방지합니다.
 
 **꼬리 질문 예시:**
 - "인기 채팅방에 트래픽이 몰리면 어떻게 하나요?" → Consistent Hashing + 채팅방 분할

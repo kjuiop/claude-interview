@@ -32,6 +32,50 @@ go build -gcflags="-m" ./...
 
 ---
 
+## Tricolor Marking 알고리즘
+
+Go GC는 **Concurrent tri-color mark-and-sweep** 방식으로 동작한다.
+
+### 색상 의미
+
+| 색상 | 의미 |
+|---|---|
+| **White** | 아직 탐색하지 않은 객체. GC 후에도 White면 참조되지 않는 **수거 대상** |
+| **Gray** | 탐색 시작했지만 자식 객체를 아직 다 확인하지 못한 상태 |
+| **Black** | 자신과 모든 참조 객체 확인 완료. **살아있는 객체** |
+
+### 알고리즘 진행 순서
+
+1. 루트 객체(전역변수, 스택 변수)를 모두 **Gray**로 표시 ← STW (짧음)
+2. Gray 객체를 꺼내 → 자식을 Gray로, 자신은 Black으로
+3. Gray가 없을 때까지 반복 (애플리케이션과 **Concurrent**하게 진행)
+4. 남은 White 객체 수거 ← STW (짧음)
+
+### STW가 짧은 이유
+
+- marking 단계를 애플리케이션 goroutine과 **동시에(Concurrent)** 실행
+- STW는 **루트 스캔 시작**과 **최종 정리** 순간에만 발생
+- Concurrent marking 중 포인터 변경 → **Write Barrier**로 추적
+
+### GC pressure 최적화 패턴
+
+```go
+// sync.Pool로 구조체 재사용 (채팅 메시지 버퍼 등)
+var msgPool = sync.Pool{
+    New: func() any { return &Message{} },
+}
+
+func handleMessage() {
+    msg := msgPool.Get().(*Message)
+    defer msgPool.Put(msg)
+    // 사용
+}
+```
+
+- `sync.Pool`: heap 할당 횟수 감소 → GC pressure 완화
+- 인터페이스 대신 **구체 타입** 유지 → heap escape 방지
+- 슬라이스 미리 할당 재사용 → goroutine마다 새 slice 생성 방지
+
 ## GC 특징
 
 - Concurrent tri-color mark-and-sweep

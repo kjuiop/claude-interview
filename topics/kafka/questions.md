@@ -49,6 +49,33 @@ Kafka의 전달 보장 수준은 offset commit 시점에 따라 세 가지로 �
 
 ---
 
+## acks 설정 및 내구성 보장
+
+### Q. Kafka Producer의 acks 설정 0/1/all 차이와 min.insync.replicas와의 관계를 설명해주세요.
+
+| acks 값 | 동작 | 트레이드오프 |
+|---|---|---|
+| `0` | 브로커 응답 기다리지 않음 | 처리량 최대, 유실 가능성 최대 |
+| `1` | **리더 브로커**만 ack | 팔로워 복제 전 리더 장애 시 유실 가능 |
+| `all(-1)` | ISR(In-Sync Replica) 전체 ack | 가장 안전, 처리량 낮음 |
+
+**min.insync.replicas와의 관계:**
+- `acks=all`은 "ISR 전체"가 아니라 **min.insync.replicas 이상**의 ISR이 ack하면 됨
+- 예: replication factor=3, `min.insync.replicas=2` → 3개 중 최소 **2개** ack 필요
+- ISR이 min.insync.replicas 미만으로 떨어지면 `NotEnoughReplicasException` 발생 (쓰기 거부)
+
+**PID 재시작 주체 — 면접 자주 틀리는 포인트:**
+- PID는 **Producer(클라이언트) 재시작** 시 새로 발급됨
+- 브로커가 재시작해도 PID/Sequence Number는 브로커에 저장 → 문제없음
+- `transactional.id` 설정 시 Producer 재시작 후에도 동일 PID 복구
+
+**면접 세션 피드백 (2026-04-12 3회차)**:
+- acks 3단계 방향, min.insync.replicas "최소" 의미 정확히 파악
+- PID 재시작 주체 오류: "브로커 재시작"이라고 했으나 → **Producer 재시작**이 맞음
+- acks=1 트레이드오프: "1개라도 ack"보다 "리더만 ack → 팔로워 복제 전 장애 시 유실" 명시 필요
+
+---
+
 ## Idempotent Producer
 
 ### Q. Kafka Idempotent Producer는 무엇이고, 어떤 한계가 있나요?

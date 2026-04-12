@@ -1,6 +1,6 @@
 ---
 type: session-memory
-updated: 2026-04-10
+updated: 2026-04-12
 ---
 
 # Session Memory
@@ -13,10 +13,10 @@ updated: 2026-04-10
 
 ## 마지막 세션 요약
 
-- **날짜:** 2026-04-10
-- **진행 내용:** 화이트큐브+넵튠 대상 5회차 면접 세션. channel/redis/error-handling 복습, mysql/kafka/redis/Istio/TLS/광고파이프라인/Rate Limiting 신규 출제
-- **끝낸 지점:** Q7(API Rate Limiting) 완료로 오늘 질문 10개 전부 소화. /퇴근 linter 실행 중.
-- **다음 이어서 할 것:** Istio Ambient Mode 심화, Forward Secrecy ECDHE 원리, distributed-systems CAP 정리
+- **날짜:** 2026-04-12
+- **진행 내용:** 화이트큐브 대상 총 6회차(복습 3회 포함). Go Map/sync.Map, Redis AOF Rewrite, Hexagonal Architecture, Kafka acks/Idempotent, CQRS, Go GC Tricolor, K8s StatefulSet, 2PC/Saga, Kafka Exactly-Once, MongoDB Sharding — 10개 주제 소화
+- **끝낸 지점:** Go GC Tricolor 복습 중단 후 /퇴근 실행. topics/ 모범 답변 6개 파일 줄글 변환 완료(kubernetes, distributed-systems, mongodb ×2, system-design ×2)
+- **다음 이어서 할 것:** Go GC Tricolor White/Gray/Black 정의 재복습 (오늘 완전 교정 못 함). kotlin/concepts.md 신규 작성
 
 ---
 
@@ -35,11 +35,12 @@ updated: 2026-04-10
 > 긴 맥락이 필요한 것들 — 다음 세션 Claude가 반드시 알아야 할 것
 
 - 화이트큐브: Go 메인 + Kubernetes/Istio 필수. gin 구문 `c.JSON(http.StatusXxx, gin.H{...})` 반복 오류 주의
-- 넵튠: Kafka 이벤트 파이프라인, 광고 플랫폼 설계 중심. Redis HINCRBY로 CTR 집계 패턴 강점
-- Istio 오늘 처음 배움 — Envoy sidecar 주입, mTLS STRICT/PERMISSIVE, VirtualService Canary 배포 정리 완료
-- 광고 파이프라인 설계 강점: Event Collector → Kafka(linger.ms+batch.size) → Redis HINCRBY → ClickHouse
-- Rate Limiting 취약점: Token Bucket refill rate 개념, Sorted Set score=timestamp 구조 추가 암기 필요
-- topics/ 모범 답변 3분 형태 변환 진행 중. golang/channel, goroutine, map, error-handling, kafka, redis, kotlin questions 는 /퇴근 agent 처리 중
+- **GC Tricolor 내일 최우선**: White=미탐색, Gray=자신확인+자식미확인, Black=자신+자식 모두 확인. 오늘 복습에서 White/Black 정의 여전히 부정확
+- K8s StatefulSet 오늘 교정 완료: Pod identity(ordinal index), 고정 DNS, 순서 보장 배포/종료, volumeClaimTemplates PVC 독립 바인딩
+- 2PC 오늘 교정 완료: Prepare(Lock 획득+응답)/Commit 2단계, Coordinator 장애→Blocking, 3PC로 개선, Saga(Choreography 보상트랜잭션)로 대체
+- MongoDB Sharding 교정 완료: Cardinality/Frequency/Monotonically Increasing 3기준, ObjectId 앞4바이트=타임스탬프→단조증가→Hotspot
+- CQRS 채팅 서버 적용 여부: MongoDB+Redis 구조에서 별도 CQRS 불필요 (Redis가 이미 읽기 모델 역할). 단, 결제 등 정합성 중요 데이터는 Command DB 직접 조회 원칙
+- topics/ 모범 답변 줄글 변환 완료: kubernetes, distributed-systems, mongodb ×2, system-design ×2 (총 6개 섹션)
 
 ---
 

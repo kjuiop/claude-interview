@@ -222,6 +222,13 @@ Go의 map은 기본적으로 thread-safe하지 않습니다. 여러 goroutine이
   - sync.Map 내부 구조: read map(atomic, lock-free) + dirty map(mutex). read-heavy 최적, write-heavy에서 dirty 승격 오버헤드로 느릴 수 있음
   - 선택 기준 정리: sync.Map = 읽기 압도적 + 키 변경 드문 경우 / map+RWMutex = 범용, 쓰기 빈번한 경우
 
+**면접 세션 피드백 (2026-04-12 1회차)**:
+- 잘한 점: nil map panic 원인(버킷 미할당)과 make 필요성, race condition 원인과 대응 수단 모두 언급. RWMutex vs sync.Map 선택 기준 방향은 맞음.
+- 보완:
+  - hash bucket 구조 여전히 미언급: 버킷 1개 = 최대 8개 key-value, tophash(해시 상위 8비트)로 빠른 키 비교, load factor 6.5 초과 시 2배 grow + incremental rehashing
+  - sync.Map 내부 구조 모름: `read`(atomic.Value, 락 없이 읽기) + `dirty`(mutex 보호) 이중 맵. miss 누적 시 dirty → read promote
+  - sync.Map 선택 기준 부정확: "읽기 많을 때"만으로 부족. **읽기 heavy + key 집합 안정적** OR **goroutine들이 disjoint key에 쓰는 경우** 두 조건 함께 언급 필요
+
 ---
 
 ## 참고 링크

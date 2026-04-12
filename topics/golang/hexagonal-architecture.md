@@ -429,6 +429,14 @@ func TestCreateUser_EmailExists(t *testing.T) {
 - Go 암시적 인터페이스 연결 미언급 — `implements` 없이 메서드 시그니처만 맞으면 Port 자동 충족이 핵심
 - 컴파일 타임 검증: `var _ port.UserRepository = (*PostgresUserRepo)(nil)` 패턴 암기
 
+**면접 세션 피드백 (2026-04-12 1회차)**:
+- 잘한 점: Port가 도메인에 선언되는 구조, Go 암시적 인터페이스 특성, In-Memory Adapter로 DB 없이 테스트 이점, 외부 의존성 교체 용이성 모두 언급. 의존성 방향 핵심 파악.
+- 보완:
+  - "외부가 내부를 모른다" 오류: **Adapter(외부)는 Port(내부 경계)를 알아야 함**. 정확한 표현: "의존성이 항상 바깥→안쪽(Adapter → Port ← Domain). Domain은 Adapter를 모른다."
+  - In-Memory Adapter 개념 오류: "expected value 반환" = Mock처럼 들림. In-Memory Adapter는 `map[int64]User`에 **실제로 저장/읽는 stateful 구현체**. 고정값 반환이 아님.
+  - DIP 키워드 미언급: "Dependency Inversion Principle — 의존성이 항상 고수준 정책(도메인)을 향한다" 함께 언급해야 면접관 인상에 남음.
+  - 코드 패턴 미언급: interface 선언 → struct 구현 → 메서드 구현 흐름을 말로라도 설명 필요
+
 ---
 
 **Q. Go의 암시적 인터페이스가 Hexagonal Architecture와 왜 잘 맞나요?**

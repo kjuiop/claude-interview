@@ -60,6 +60,44 @@ related: [distributed-systems, golang, kubernetes]
 | **RDB + AOF 혼합** | 주기 스냅샷 + 그 이후 AOF 로깅 | 빠른 복구 + 최소 유실 | 복잡도 증가 |
 | **No Persistence** | 영속성 없음 | 최고 성능 | 재시작 시 데이터 전부 유실 |
 
+### AOF 상세 — appendfsync 옵션
+
+| 옵션 | 동작 | 최대 유실 | 성능 |
+|---|---|---|---|
+| `always` | 매 명령어마다 fsync 호출 | 0 | 가장 느림 (높은 IOPS) |
+| `everysec` | 1초마다 fsync (기본값) | 최대 1초치 | 적절 |
+| `no` | OS가 자율적으로 flush 결정 (보통 30초 단위) | 최대 30초치 | 가장 빠름 |
+
+### AOF Rewrite (파일 압축)
+
+> ⚠️ AOF Rewrite는 복구(recovery)가 아니라 **파일 압축(compaction)**이다.
+
+**문제**: AOF는 모든 쓰기 명령어를 계속 append하므로 파일이 무한히 커진다.
+- `SET k 1`, `SET k 2`, `SET k 3` 모두 기록 → 현재 상태는 `SET k 3` 하나면 표현 가능
+
+**해결**: `BGREWRITEAOF` 명령어로 현재 메모리 상태 기준 최소 명령어 집합으로 AOF 파일 재작성
+
+**동작 원리**:
+1. `BGREWRITEAOF` 호출 → **fork()** 로 자식 프로세스 생성
+2. 자식: 현재 메모리 스냅샷 기반으로 새 AOF 파일 작성
+3. 부모: 그 사이 들어온 명령어를 별도 버퍼에 기록
+4. 자식 완료 후 버퍼를 합쳐서 새 AOF 파일로 교체
+
+### 재시작 시 복구 우선순위
+
+> **AOF 활성화 시 AOF를 우선 사용한다** (더 최신 데이터 보유)
+
+**Hybrid Persistence (Redis 4.0+, `aof-use-rdb-preamble yes`)**:
+- 하나의 AOF 파일 안에 **RDB 스냅샷(앞부분) + AOF 명령어(뒷부분)** 결합
+- 두 파일을 별도로 조합하는 게 아닌 단일 파일 구조
+- 재시작 시: 앞부분은 RDB 바이너리로 빠르게 로드 → 뒷부분만 AOF 리플레이
+- 실무 권장 설정
+
+**면접 세션 피드백 (2026-04-12 1회차)**:
+- AOF Rewrite를 "복구"로 잘못 이해 → 파일 압축(compaction)임을 반드시 암기
+- 재시작 순서 오답: "RDB 먼저 → AOF"는 틀림. AOF 활성화 시 AOF 우선
+- Hybrid는 두 파일 조합이 아닌 단일 AOF 파일에 RDB preamble을 심는 방식
+
 ### 메모리 관리 — Eviction Policy
 메모리 한계(`maxmemory`) 도달 시 키 제거 정책:
 
