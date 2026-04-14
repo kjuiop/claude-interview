@@ -1,6 +1,6 @@
 ---
 tags: [zookeeper, distributed-systems, coordination, event-driven]
-related: [distributed-systems, kafka-rabbitmq, golang]
+related: [distributed-systems, kafka, rabbitmq, golang]
 ---
 
 # ZooKeeper — 핵심 개념 정리

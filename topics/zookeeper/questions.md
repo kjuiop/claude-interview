@@ -1,6 +1,6 @@
 ---
 tags: [zookeeper, distributed-systems, interview-questions]
-related: [distributed-systems, golang, kafka-rabbitmq]
+related: [distributed-systems, golang, kafka, rabbitmq]
 ---
 
 # ZooKeeper — 면접 예상 질문

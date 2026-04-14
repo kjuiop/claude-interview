@@ -241,6 +241,6 @@ min.insync.replicas=3: ISR 3개 모두 필요 → 내구성 최대, 브로커 1�
 ---
 
 ## KRaft 모드 (Kafka 4.0+)
-- ZooKeeper 완전 제거 → Kafka 자체 Raft 합의 알고리즘으로 메타데이터 관리
+- [[topics/zookeeper/concepts\|ZooKeeper]] 완전 제거 → Kafka 자체 Raft 합의 알고리즘으로 메타데이터 관리
 - Controller 역할을 전담하는 KRaft Controller가 클러스터 상태 관리
 - 장점: 운영 단순화, 빠른 Controller Failover, 파티션 수 확장성 개선

@@ -15,7 +15,11 @@ related: [postgresql, redis]
 
 **핵심 키워드**: Atomicity, Consistency, Isolation, Durability, REPEATABLE READ, MVCC, Dirty Read, Non-Repeatable Read, Phantom Read, Next-Key Lock
 
-**ACID 정의**:
+**모범 답변:**
+
+트랜잭션의 ACID 속성은 데이터 무결성을 보장하는 네 가지 원칙입니다. Atomicity는 원자성으로, 트랜잭션 내 작업이 모두 성공하거나 모두 실패해야 한다는 원칙입니다. 주문과 재고 차감을 하나의 트랜잭션으로 묶으면 둘 중 하나만 성공하는 상황을 막을 수 있습니다. Consistency는 일관성으로, 트랜잭션 전후에 데이터 무결성 제약 조건이 유지되어야 한다는 것입니다. FK 제약이나 Unique 키 같은 데이터베이스 규칙이 항상 지켜집니다. Isolation은 격리성으로, 동시에 실행되는 트랜잭션 간에 서로 간섭하지 않아야 한다는 원칙입니다. 격리 수준으로 조절하며, 너무 강하면 성능이 낮아지고 너무 약하면 Dirty Read 같은 이상 현상이 발생합니다. Durability는 지속성으로, 한 번 커밋된 데이터는 시스템 장애가 발생해도 영구적으로 보존됩니다. MySQL에서 기본 격리 수준은 REPEATABLE READ입니다. 이 수준은 Dirty Read와 Non-Repeatable Read를 방지합니다. Dirty Read는 아직 커밋되지 않은 데이터를 다른 트랜잭션이 읽는 현상으로, REPEATABLE READ에서는 발생하지 않습니다. Non-Repeatable Read는 같은 트랜잭션 내에서 동일 row를 두 번 읽었을 때 다른 값이 나오는 현상인데, MVCC 스냅샷으로 방지합니다. Phantom Read는 동일한 범위 쿼리를 두 번 실행할 때 새 row가 나타나는 현상으로, SQL 표준에서는 REPEATABLE READ에서 발생하지만 InnoDB는 Next-Key Lock(Gap Lock)으로 이를 실질적으로 방지합니다.
+
+**ACID 정의 (빠른 암기):**
 - A(Atomicity): 트랜잭션 내 작업이 모두 성공하거나 모두 실패 (all or nothing)
 - C(Consistency): 트랜잭션 전후 데이터 무결성 제약 조건 유지 (FK, Unique 등)
 - I(Isolation): 동시 트랜잭션 간 간섭 없음 (격리 수준으로 조절)

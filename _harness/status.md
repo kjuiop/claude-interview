@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-12
+updated: 2026-04-14
 ---
 
 # 현재 준비 상태 스냅샷
@@ -26,7 +26,7 @@ updated: 2026-04-12
 | 기술 | 수준 | 마지막 확인 | 취약 포인트 |
 |---|---|---|---|
 | golang/goroutine | ★★★★★ | 2026-03-27 | - |
-| golang/channel | ★★★★★ | 2026-04-10 | 2회차 복습에서 모든 오개념 교정 완료. nil channel 동적 비활성화 패턴 구체 예시 추가 필요 |
+| golang/channel | ★★★★★ | 2026-04-14 | nil channel 동적 비활성화·drop count→재연결 흐름 완성. select+default non-blocking send 패턴 코드 즉시 제시 능력 확인 |
 | golang/map | ★★★★★ | 2026-04-12 | hash bucket tophash 구조, sync.Map read/dirty/promote 패턴 교정 완료 |
 | golang/interface | ★★★★☆ | 2026-04-01 | Accept interfaces, return structs 관용구, 외부 라이브러리 연동 예시 |
 | golang/error-handling | ★★★★☆ | 2026-04-10 | gin 구문 `c.JSON(http.StatusXxx, gin.H{"error":"..."})` 반복 오류 — 구문 암기 최우선 |
@@ -51,12 +51,13 @@ updated: 2026-04-12
 
 ## 다음 우선순위
 
-1. `kafka` — commitAsync 재시도 순서(최신 offset만), max.poll.interval.ms 튜닝, exactly-once transactional API (2026-04-14 세션 교정 완료 항목)
+1. `kafka` — exactly-once transactional API 전체 흐름 복습 (commitAsync 재시도 순서 교정 완료)
 2. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습
 3. `kotlin/concepts.md` — 내용 없음, 신규 작성 필요
 4. `kubernetes/Istio` — Ambient Mode(sidecar-less, Istio 1.24+) 심화 암기
 5. `networking` — Forward Secrecy(ECDHE ephemeral key pair 생성 원리) 완성
 6. `elasticsearch` — 공고 요구사항, 미정리
+7. `redis` — Redis 장애 fallback 패턴(Sentinel/Cluster, degraded mode) 추가 정리 필요
 
 ---
 
@@ -65,7 +66,7 @@ updated: 2026-04-12
 | 회사 | 세션 수 | 마지막 피드백 요약 |
 |---|---|---|
 | 화이트큐브 | 8 | 2026-04-12 세션(총 6회차) — Go Map/sync.Map/Hexagonal/Redis AOF 전부 교정 완료. K8s StatefulSet·2PC 신규 교정. GC Tricolor 색상 정의 여전히 불완전 — 내일 최우선 복습 |
-| 넵튠 | 4 | 2026-04-14 세션(1회차) — Go channel fan-out 원리 완성. Kafka max.poll.interval.ms·commitAsync 재시도 순서 교정. 광고 파이프라인 ZooKeeper Watch 연결 강점. 공통 보완: 코드 직접 제시 부재, Redis 장애 fallback 누락 |
+| 넵튠 | 5 | 2026-04-14 세션(2회차) — Go channel fan-out·nil channel 비활성화 완성. Kafka rebalancing 4조건(max.poll.interval.ms 교정). 광고 파이프라인 ZooKeeper Watch + Redis pub/sub 비교 강점. 공통 보완: 코드 직접 제시, Redis 장애 fallback 패턴 추가 필요 |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---

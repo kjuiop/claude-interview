@@ -1,6 +1,6 @@
 ---
 type: harness-entropy
-updated: 2026-04-01
+updated: 2026-04-14
 ---
 
 # 엔트로피 추적 (Entropy Management)
@@ -26,7 +26,7 @@ updated: 2026-04-01
 |---|---|---|---|
 | distributed-systems | `topics/distributed-systems/concepts.md` | 🔴 높음 | CAP 정리 오늘 세션 전혀 모름 → 개념 추가 완료, 복습 필요 |
 | kotlin | `topics/kotlin/concepts.md` | 🔴 높음 | suspend fun Continuation, Dispatcher 타입 오개념. 스텁만 있음 |
-| kafka | `topics/kafka/concepts.md` | 🟡 중간 | Exactly-Once 흐름 sessions에서 다뤘으나 concepts 미정리 |
+| redis | `topics/redis/concepts.md` | 🟡 중간 | Redis 장애 fallback(Sentinel/Cluster, degraded mode) 면접 세션에서 누락 확인 — 정리 필요 |
 | rabbitmq | `topics/rabbitmq/concepts.md` | 🟡 중간 | 공고 언급 |
 | rabbitmq | `topics/rabbitmq/questions.md` | 🟡 중간 | 공고 언급 |
 | java | `topics/java/concepts.md` | 🟡 중간 | 공고 요구사항 |
@@ -54,6 +54,8 @@ updated: 2026-04-01
 | 2026-04-01 | 3회차 | Kotlin Coroutine "싱글스레드 기반" 오개념 | kotlin/concepts.md Dispatcher 타입 설명 추가 필요 |
 | 2026-04-01 | 1회차 | TLS Handshake 인증서 전송 방향 역전 | 2회차에서 교정 완료 |
 | 2026-04-01 | 1,2회차 | Kafka 두 실패 케이스(중복 vs 유실) 정반대 | 2회차에서 교정 완료 |
+| 2026-04-14 | 2회차 | Redis 장애 fallback 미언급 | redis/concepts.md Sentinel/Cluster, degraded mode 정리 필요 |
+| 2026-04-14 | 2회차 | ZooKeeper Watch 1회성 재등록 미언급 | zookeeper/questions.md에 재등록 패턴 보강 — 이미 기록됨 |
 
 ---
 

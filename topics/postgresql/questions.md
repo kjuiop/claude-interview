@@ -13,19 +13,13 @@ related: [mysql, distributed-systems]
 
 ### Q. MySQL과 PostgreSQL의 주요 차이점은 무엇인가요? MVCC 구현 방식에서 두 DB는 어떻게 다른가요?
 
-**핵심 답변 포인트:**
+**모범 답변:**
 
-1. **기본 격리 수준 차이**
-   - MySQL: REPEATABLE READ (트랜잭션 내 동일 SELECT → 항상 동일 결과)
-   - PostgreSQL: READ COMMITTED (각 쿼리마다 최신 커밋 스냅샷)
+MySQL과 PostgreSQL은 MVCC를 구현하는 방식에서 근본적인 차이가 있습니다. 가장 중요한 차이는 이전 버전 데이터를 어디에 저장하느냐입니다. MySQL InnoDB는 이전 버전 데이터를 별도의 Undo Log, 즉 rollback segment에 저장합니다. 트랜잭션이 완료되면 purge thread가 자동으로 불필요한 버전들을 삭제해주기 때문에 개발자가 별도로 신경 쓸 필요가 없습니다. 반면 PostgreSQL은 UPDATE나 DELETE가 발생할 때 기존 row를 즉시 제거하지 않고, 테이블 파일 자체에 dead tuple로 남겨둡니다. xmin과 xmax 트랜잭션 ID 필드로 가시성을 제어하는 방식으로, VACUUM이 실행돼야만 이 dead tuple이 재사용 가능한 공간으로 전환됩니다.
 
-2. **MVCC 이전 버전 저장 위치 차이 (가장 중요)**
-   - MySQL: Undo Log (별도 rollback segment) → purge thread 자동 삭제
-   - PostgreSQL: 테이블 파일 자체 (dead tuple) → VACUUM이 정리
+두 번째 차이는 기본 격리 수준입니다. MySQL의 기본값은 REPEATABLE READ로, 트랜잭션이 시작된 시점의 스냅샷을 끝까지 유지해 같은 SELECT를 반복해도 항상 동일한 결과를 반환합니다. PostgreSQL의 기본값은 READ COMMITTED로, 각 쿼리(statement)가 실행되는 시점의 최신 커밋 데이터를 읽습니다. 같은 트랜잭션 안에서도 다른 트랜잭션이 커밋하면 이후 SELECT에 반영됩니다.
 
-3. **실무 영향**
-   - MySQL 장기 트랜잭션: Undo Log 비대화
-   - PostgreSQL VACUUM 미실행: 테이블 bloat (dead tuple 누적)
+실무에서의 영향도 다릅니다. MySQL에서 장기 트랜잭션이 돌면 Undo Log가 계속 쌓여 비대해지고 디스크 부하가 증가합니다. PostgreSQL에서는 VACUUM이 제때 실행되지 않으면 dead tuple이 쌓여 테이블 파일이 비대해지는 Table Bloat이 발생합니다. 더 심각하게는 Transaction ID가 32비트라 약 21억 회 후 순환하는 XID Wraparound가 발생해 PostgreSQL이 안전 모드로 전환되고 쓰기가 전면 중단될 수 있습니다.
 
 **꼬리 질문 대비:**
 - "PostgreSQL에서 VACUUM이 왜 필요한가요?" → dead tuple 정리, 테이블 bloat 방지
@@ -45,9 +39,6 @@ related: [mysql, distributed-systems]
 - `UPDATE` 시 기존 row에 `xmax` 설정 + 새 row 추가 → heap에 두 버전 공존
 - VACUUM이 dead tuple 정리, OS 반환은 `VACUUM FULL`만 가능 (배타적 lock)
 - Long-running transaction은 VACUUM을 막음 → bloat의 주요 원인
-
-**모범 답변 구조:**
-MySQL MVCC(Undo Log + REPEATABLE READ) → PostgreSQL MVCC(xmin/xmax로 버전 관리, dead tuple + VACUUM + READ COMMITTED) → 실무 차이(bloat vs undo log 비대) → 격리 수준 차이 동작 예시
 
 ---
 
