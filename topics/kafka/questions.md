@@ -175,9 +175,23 @@ Offset은 파티션 내 메시지의 고유 순번으로, Consumer가 어디까�
 | **수동 동기 커밋** (`commitSync()`) | 처리 후 명시적 커밋, 성공 대기 | 정확한 at-least-once 보장 | 커밋 응답 대기 → 처리량 낮음 |
 | **수동 비동기 커밋** (`commitAsync()`) | 처리 후 비동기 커밋, 콜백 | 처리량 높음 | 실패 시 재시도 로직 필요 |
 
+**⚠️ commitAsync 재시도 주의사항 (면접 세션 피드백 2026-04-14)**:
+`commitAsync` 실패 시 이전 offset으로 재시도하면 안 된다. 비동기 특성상 이미 더 높은 offset이 성공적으로 commit됐을 수 있기 때문이다. 재시도는 반드시 **현재 시점의 최신 offset 기준**으로만 해야 중복 commit을 방지할 수 있다.
+
+```java
+consumer.commitAsync((offsets, exception) -> {
+    if (exception != null) {
+        // ❌ 이전 offsets로 재시도 금지 — 더 높은 offset이 이미 commit됐을 수 있음
+        // ✅ 로깅 후 다음 poll 시 자연스럽게 최신 offset으로 처리되도록 방치
+        log.error("Commit failed for offsets {}", offsets, exception);
+    }
+});
+```
+
 **꼬리 질문 예시**:
 - 자동 커밋 환경에서 메시지가 유실될 수 있는 시나리오를 설명해주세요.
 - 파티션별로 다른 offset에서 커밋하려면 어떻게 하나요?
+- commitAsync 실패 시 이전 offset으로 재시도하면 안 되는 이유는?
 
 ---
 
@@ -237,6 +251,14 @@ Consumer Group은 Kafka에서 수평 확장과 메시지 격리를 동시에 가
 **난이도**: 심화
 
 **핵심 키워드**: CooperativeStickyAssignor, Static Membership, session.timeout.ms, max.poll.interval.ms, KRaft, Rolling Update
+
+**⚠️ max.poll.interval.ms 실무 주의사항 (면접 세션 피드백 2026-04-14)**:
+파티션 수 변경이나 consumer 재시작 없이도 rebalancing이 발생하는 가장 흔한 원인이다. Consumer가 **살아있고 heartbeat도 정상**인데, `poll()` 호출 간격이 `max.poll.interval.ms`(기본 5분)를 초과하면 broker가 해당 consumer를 죽었다고 판단해 rebalancing을 트리거한다. 처리 로직이 무거운 consumer에서 자주 발생하며, 처리 중이던 메시지를 다른 consumer가 재할당받아 **중복 처리**가 발생한다.
+
+해결 방법:
+- `max.poll.interval.ms` 값 늘리기 (처리 시간 상한에 맞게)
+- `max.poll.records` 줄여 배치 크기 감소
+- 처리 로직을 비동기로 분리해 poll 루프를 빠르게 유지
 
 **모범 답변:**
 Consumer Rebalancing은 Kafka 운영에서 처리 중단의 주요 원인 중 하나입니다. 기본 Eager Rebalancing 방식은 리밸런싱이 시작되면 모든 Consumer가 보유한 파티션을 전부 반납하고 재배정을 기다리는 Stop-The-World 방식이기 때문에 수십 초의 처리 중단이 발생할 수 있습니다. 이를 해결하는 첫 번째 방법은 `CooperativeStickyAssignor`를 사용하는 것입니다. 이 전략은 Incremental 방식으로 변경이 필요한 파티션만 단계적으로 재배정하기 때문에 나머지 Consumer들은 리밸런싱 중에도 계속 처리를 유지할 수 있고, 기존 30초 이상의 중단을 수 초 이내로 줄일 수 있습니다. 두 번째 방법은 Static Group Membership으로, `group.instance.id`에 고정값을 부여하면 Consumer가 재시작했을 때 동일한 ID로 재합류해 리밸런싱 없이 기존 파티션을 그대로 재획득합니다. Rolling Update와 조합하면 배포 중 처리 중단을 대폭 줄일 수 있습니다. 타임아웃 설정도 중요합니다. `session.timeout.ms`는 브로커가 Consumer 장애를 감지하는 시간으로 기본값은 45초이고, `max.poll.interval.ms`는 `poll()` 호출 간격의 최대치입니다. Static Membership 환경에서 `session.timeout.ms` 이내에 재접속하면 리밸런싱 없이 복구됩니다. KRaft 도입 이후 ZooKeeper를 제거하면서 컨트롤러가 KRaft 기반으로 동작하게 됐고, 파티션 메타데이터 관리 속도가 빨라져 리밸런싱 자체의 속도도 개선됐습니다.

@@ -16,9 +16,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** 횡단 관심사, Cross-Cutting Concern, 모듈화
 
 **모범 답변 방향:**
-- OOP는 비즈니스 로직을 객체로 분리하지만, 로깅·트랜잭션·보안처럼 여러 객체에 걸친 공통 관심사는 분리하기 어렵다
-- AOP는 이런 **횡단 관심사(Cross-Cutting Concern)** 를 별도 모듈(Aspect)로 분리해 핵심 로직에서 제거
-- 결과: 비즈니스 코드가 순수해지고, 공통 기능은 한 곳에서 관리
+
+OOP는 비즈니스 로직을 객체 단위로 분리하는 데는 탁월하지만, 로깅·트랜잭션·보안·캐시처럼 여러 객체에 걸쳐 반복적으로 등장하는 공통 관심사를 분리하기 어렵습니다. 예를 들어 트랜잭션 처리를 OOP만으로 구현하면 모든 서비스 메서드에 `begin/commit/rollback` 로직이 중복됩니다. AOP는 이런 횡단 관심사(Cross-Cutting Concern)를 Aspect라는 별도 모듈로 분리해 핵심 비즈니스 로직에서 완전히 제거하는 프로그래밍 패러다임입니다. 결과적으로 비즈니스 코드는 순수하게 유지되고, 공통 기능은 Aspect 한 곳에서 관리되어 변경이 필요할 때 Aspect만 수정하면 됩니다. Spring의 `@Transactional`이 AOP 위에서 동작하는 대표적인 예입니다.
 
 **꼬리 질문 예시:**
 - 횡단 관심사의 실제 예시를 들어주세요.
@@ -39,11 +38,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** Aspect, Advice, Pointcut, JoinPoint, Weaving
 
 **모범 답변 방향:**
-- **JoinPoint**: AOP를 적용할 수 있는 모든 지점. Spring AOP는 메서드 실행 시점만 지원
-- **Pointcut**: JoinPoint 중 Advice를 적용할 대상을 선별하는 표현식
-- **Advice**: 실제로 실행할 공통 코드. `@Before/@After/@Around` 등으로 시점 지정
-- **Aspect**: Advice + Pointcut을 묶은 모듈 단위. "어디서(Pointcut) 무엇을(Advice)" 정의
-- **Weaving**: Aspect를 타겟 객체에 연결하는 과정. Spring AOP는 런타임(프록시) 방식
+
+네 가지 용어는 계층적으로 연결됩니다. JoinPoint는 AOP를 적용할 수 있는 모든 후보 지점으로, Spring AOP에서는 메서드 실행 시점만 해당됩니다. Pointcut은 그 JoinPoint 중 실제로 Advice를 적용할 대상을 선별하는 표현식입니다. `execution(* com.example.service.*.*(..))` 같은 형태로 작성하며, JoinPoint의 부분집합이라고 이해하면 됩니다. Advice는 실제로 실행할 공통 코드로, `@Before`, `@After`, `@Around` 등으로 실행 시점을 지정합니다. Aspect는 이 Advice와 Pointcut을 묶은 모듈 단위로, "어디서(Pointcut) 무엇을(Advice) 실행할지"를 하나의 클래스에 정의한 것입니다. Weaving은 Aspect를 타겟 Bean에 연결하는 과정이며, Spring AOP는 런타임 프록시 방식을 사용합니다. 암기 팁으로는 "JoinPoint = 합류 가능한 모든 지점, Pointcut = 그 중 잘라서 선택한 것"으로 기억하면 혼동을 줄일 수 있습니다.
 
 **꼬리 질문 예시:**
 - Pointcut 표현식 `execution(* com.example.service.*.*(..))` 을 해석해주세요.
@@ -65,12 +61,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** @Around, @Before, @AfterReturning, @AfterThrowing, ProceedingJoinPoint, proceed()
 
 **모범 답변 방향:**
-- `@Before`: 메서드 실행 전. 실행 자체를 막을 수 없음 (예외 throw는 가능)
-- `@AfterReturning`: 정상 반환 후. 반환값 접근 가능. 예외 시 미실행
-- `@AfterThrowing`: 예외 발생 후. 예외 객체 접근 가능
-- `@After`: 항상 실행 (finally와 유사). 정상/예외 무관
-- `@Around`: 가장 강력. `proceed()` 호출로 실행 여부/시점 제어. 반환값 변경 가능
-- 실무 원칙: **필요한 최소 타입 사용**. 단순 로깅이면 `@Before`, 시간 측정이면 `@Around`
+
+다섯 가지 Advice 타입은 실행 시점과 접근 가능한 정보에서 차이가 납니다. `@Before`는 메서드 실행 전에 동작하며, 실행 자체를 막을 수는 없습니다(예외 throw는 가능). `@AfterReturning`은 메서드가 정상적으로 반환한 후에만 실행되며 반환값에 접근할 수 있고, 예외 발생 시에는 실행되지 않습니다. `@AfterThrowing`은 예외가 발생했을 때만 실행되며 예외 객체에 접근할 수 있습니다. `@After`는 정상/예외 여부와 관계없이 항상 실행되어 Java의 `finally`와 유사합니다. `@Around`는 가장 강력한 타입으로 `ProceedingJoinPoint.proceed()` 호출로 메서드 실행 여부와 시점을 직접 제어할 수 있고 반환값도 변경할 수 있습니다. 실무 원칙은 필요한 최소 타입을 사용하는 것입니다. 단순 파라미터 로깅이면 `@Before`, 메서드 실행 시간 측정처럼 전후 모두 필요하면 `@Around`를 선택합니다. `@Around`는 `proceed()`를 호출하지 않으면 메서드 자체가 실행되지 않기 때문에 실수 가능성이 있어 불필요하게 남용하지 않는 것이 좋습니다.
 
 **꼬리 질문 예시:**
 - `@Around`에서 `proceed()`를 호출하지 않으면 어떻게 되나요?
@@ -87,10 +79,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** self-invocation, 프록시 우회, this 직접 호출, CGLIB, 별도 클래스 분리
 
 **모범 답변 방향:**
-- Spring AOP는 프록시 기반 → **같은 클래스 내 `this.메서드()` 호출은 프록시를 우회** → AOP 미적용
-- `final` 메서드에 CGLIB 적용 불가 (상속으로 오버라이드 불가)
-- Spring Bean이 아닌 일반 객체(`new`로 생성)에는 AOP 미적용
-- 해결책: 별도 클래스 분리(권장) → 외부 빈 호출로 프록시 경유, self-injection은 순환 참조 위험
+
+Spring AOP가 동작하지 않는 대표적인 세 가지 케이스가 있습니다. 첫째는 self-invocation입니다. Spring AOP는 CGLIB 프록시 기반으로 동작하는데, 같은 클래스 내에서 `this.메서드()`로 직접 호출하면 프록시를 경유하지 않아 AOP가 적용되지 않습니다. `@Transactional`이 self-invocation에서 동작하지 않는 이유도 동일한 원리입니다. 해결책으로는 별도 클래스로 분리해 외부 빈 호출로 만드는 방법이 권장됩니다. self-injection(`@Autowired` 자기 자신)도 가능하지만 순환 참조 위험이 있습니다. 둘째는 `final` 메서드입니다. CGLIB는 대상 클래스를 상속해 메서드를 오버라이드하는 방식인데, `final` 메서드는 오버라이드가 불가하므로 AOP를 적용할 수 없습니다. 셋째는 `new`로 직접 생성한 일반 객체입니다. Spring Container가 관리하는 Bean이 아니기 때문에 프록시가 생성되지 않아 AOP가 적용되지 않습니다. 반드시 Spring Bean으로 주입받아 사용해야 합니다.
 
 **꼬리 질문 예시:**
 - `@Transactional`이 self-invocation에서 동작하지 않는 이유도 같은 원리인가요?
@@ -114,10 +104,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** AOP Proxy, self-invocation, propagation, checked exception rollback
 
 **모범 답변 방향:**
-- AOP Proxy 기반 → 외부 호출만 proxy 경유, 내부 호출은 `this` 직접 호출로 우회
-- self-invocation 해결: 별도 클래스 분리(권장) > self-injection
-- checked exception은 기본 rollback 안 됨 → `rollbackFor = Exception.class`
-- `REQUIRES_NEW`: 새 트랜잭션 생성, 로그/감사 기록에 활용
+
+`@Transactional`은 Spring AOP Proxy 위에서 동작합니다. 외부에서 빈을 호출할 때는 CGLIB 프록시를 경유해 트랜잭션이 시작되지만, 같은 클래스 내에서 `this.메서드()`로 직접 호출하면 프록시를 우회하므로 트랜잭션이 적용되지 않습니다. 이 경우 별도 클래스로 분리해 외부 빈 호출로 만드는 것이 권장 해결책입니다. 또 한 가지 중요한 주의사항은 checked exception의 롤백 동작입니다. Spring은 기본적으로 `RuntimeException`(unchecked)에 대해서만 롤백하며, `IOException` 같은 checked exception은 기본적으로 롤백하지 않습니다. 예를 들어 PG사 API 호출 중 `IOException`이 발생해도 `rollbackFor`를 설정하지 않으면 결제 레코드가 DB에 커밋되어 실제 결제 실패와 불일치가 생깁니다. `@Transactional(rollbackFor = Exception.class)`로 해결할 수 있습니다. `REQUIRES_NEW`는 현재 트랜잭션과 무관한 새 트랜잭션을 생성해 실패 로그나 감사 기록처럼 메인 트랜잭션이 롤백되어도 반드시 저장해야 하는 경우에 활용합니다.
 
 **꼬리 질문 예시:**
 - 같은 클래스 내 `@Transactional` 메서드를 내부 호출하면 어떻게 되나요?
@@ -145,11 +133,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** lazy loading, fetch join, @EntityGraph, N+1 = 1+N번, pagination 주의
 
 **모범 답변 방향:**
-- N+1 = 1(목록 조회) + N(각 연관 엔티티 조회) = **N+1번** 쿼리 (100개면 101번)
-- 발생 조건: lazy loading 연관 엔티티를 반복문에서 접근
-- 해결: fetch join(`JOIN FETCH`) → 1번 쿼리로 해결
-- @EntityGraph: 어노테이션 방식, 단순 조회에 적합
-- 주의: fetch join + pagination 동시 사용 시 메모리 페이징(HHH90003004 경고)
+
+N+1 문제는 1번의 목록 조회 쿼리 이후 각 엔티티의 연관 데이터를 로드하기 위해 N번의 추가 쿼리가 발생하는 현상입니다. 이벤트 100개를 조회하면 각 이벤트의 author를 lazy loading으로 접근하는 반복문에서 100번 추가 쿼리가 발생해 총 101번이 실행됩니다. 해결 방법은 크게 세 가지입니다. 첫째로 fetch join은 JPQL에서 `JOIN FETCH`를 사용해 1번 쿼리로 연관 엔티티를 함께 로드하는 방법이며, Querydsl에서도 `.fetchJoin()`으로 동일하게 처리합니다. 둘째로 `@EntityGraph`는 Repository 메서드 위에 선언해 어노테이션만으로 fetch join 효과를 내는 방법으로, 단순 조회에 적합합니다. 셋째로 `@BatchSize`는 N+1을 IN 쿼리로 묶어 처리하는 방법입니다. fetch join 사용 시 가장 중요한 주의사항은 pagination과의 충돌입니다. fetch join에 `Pageable`을 함께 쓰면 Hibernate가 DB에 LIMIT을 적용하지 못하고 전체 데이터를 메모리에 올린 뒤 애플리케이션에서 페이징 처리합니다(HHH90003004 경고). OOM 위험이 있으므로 ID를 먼저 페이지네이션한 후 fetch join으로 2단계 조회하거나 `@BatchSize`를 사용하는 것이 권장됩니다.
 
 **꼬리 질문 예시:**
 - fetch join과 @EntityGraph의 차이는 언제 문제가 되나요?
@@ -199,11 +184,8 @@ related: [kotlin, distributed-systems]
 **핵심 키워드:** CGLIB, JDK Dynamic Proxy, TransactionInterceptor, PlatformTransactionManager, MethodInterceptor, Strategy Pattern
 
 **모범 답변 방향:**
-- Spring은 `@EnableTransactionManagement`로 대상 Bean을 AOP Proxy로 교체
-- Spring Boot 2.x 기본은 CGLIB — 클래스를 상속하여 메서드를 오버라이드하는 방식으로 가로챔
-- 가로챈 시점에 `TransactionInterceptor.invoke()` 실행 → `PlatformTransactionManager`에 실제 처리 위임 (Strategy Pattern)
-- `PlatformTransactionManager`는 JDBC면 `con.setAutoCommit(false)` → `commit()` or `rollback()`
-- 직접 구현 시: `MethodInterceptor` 구현 → `PlatformTransactionManager` 주입 → `getTransaction()` → 메서드 실행 → `commit/rollback`
+
+`@Transactional`을 직접 구현한다면 AOP Proxy와 트랜잭션 매니저 두 축으로 설계해야 합니다. Spring은 `@EnableTransactionManagement`를 통해 대상 Bean을 CGLIB Proxy로 교체합니다. Spring Boot 2.x부터는 기본값이 CGLIB로, 대상 클래스를 상속해 메서드를 오버라이드하는 방식으로 메서드 호출을 가로챕니다. 가로챈 시점에 `TransactionInterceptor.invoke()`가 실행되고, 이 인터셉터는 실제 트랜잭션 처리를 `PlatformTransactionManager`에 위임합니다. 이것이 Strategy Pattern으로, JDBC면 `DataSourceTransactionManager`, JPA면 `JpaTransactionManager` 구현체가 주입됩니다. `DataSourceTransactionManager`는 내부적으로 `con.setAutoCommit(false)`로 트랜잭션을 시작하고, 정상 완료 시 `con.commit()`, `RuntimeException` 발생 시 `con.rollback()`을 호출합니다. 직접 구현한다면 `MethodInterceptor`를 구현해 `PlatformTransactionManager`를 주입받고, `getTransaction()` → 메서드 실행 → `commit/rollback` 흐름으로 작성하면 됩니다.
 
 **꼬리 질문 예시:**
 - CGLIB와 JDK Dynamic Proxy 중 어느 것이 Spring Boot 기본이고 왜 그렇게 바뀌었나요?
@@ -233,15 +215,7 @@ related: [kotlin, distributed-systems]
 
 **모범 답변 방향**:
 
-**Netty란**:
-- Java 기반 **비동기 이벤트 기반(Asynchronous Event-Driven) 네트워크 프레임워크**
-- 기존 Java BIO(Blocking I/O): 연결당 스레드 1개 → 연결 수가 많으면 스레드 폭발
-- Netty: NIO 기반 Non-Blocking I/O + Reactor 패턴으로 **적은 스레드로 대량 연결 처리**
-- 사용처: gRPC, Kafka, Elasticsearch, Spring WebFlux 내부 HTTP 서버(reactor-netty)
-
-**Reactor 패턴**:
-- 이벤트 발생 시까지 대기하다가 발생하면 등록된 핸들러에 디스패치하는 패턴
-- 핵심: **I/O 이벤트를 기다리는 스레드(Event Loop)가 블로킹되지 않음**
+Netty는 Java 기반의 비동기 이벤트 기반 네트워크 프레임워크입니다. 기존 Java BIO 방식은 연결당 스레드 1개를 할당하기 때문에 연결이 많아질수록 스레드 수가 폭발적으로 증가하는 문제가 있었습니다. Netty는 NIO(Non-Blocking I/O) 기반의 Reactor 패턴으로 소수의 스레드로 대량 연결을 처리합니다. gRPC, Kafka, Elasticsearch, Spring WebFlux 내부 HTTP 서버(reactor-netty)가 모두 Netty를 기반으로 동작합니다. Reactor 패턴은 I/O 이벤트가 발생할 때까지 대기하다가 이벤트가 발생하면 등록된 핸들러에 디스패치하는 방식으로, Event Loop 스레드가 블로킹되지 않는 것이 핵심입니다.
 
 **Netty 핵심 구조**:
 ```

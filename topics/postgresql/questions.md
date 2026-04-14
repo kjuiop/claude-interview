@@ -59,20 +59,7 @@ MySQL MVCC(Undo Log + REPEATABLE READ) → PostgreSQL MVCC(xmin/xmax로 버전 �
 
 **모범 답변 방향**:
 
-**Dead Tuple 발생 이유:**
-- PostgreSQL은 MVCC로 UPDATE/DELETE 시 기존 행을 물리적으로 삭제하지 않음
-- 기존 행에 "만료됨"(`xmax`) 표시만 → Dead Tuple로 힙에 남음
-- 이유: 진행 중인 다른 트랜잭션이 이전 버전을 읽어야 할 수 있어서
-
-**VACUUM 역할:**
-- Dead Tuple이 차지한 공간을 "재사용 가능"으로 표시 (파일 크기는 유지)
-- `VACUUM FULL`: OS에 공간 반환, 단 전체 테이블 Lock 발생 → 운영 중 지양
-- `ANALYZE`와 함께 실행 시: 통계 정보 갱신 → 쿼리 플래너 최적화
-
-**Autovacuum 없으면 발생하는 문제:**
-1. **테이블 Bloat**: Dead Tuple 누적으로 디스크 과다 사용, 순차 스캔 느려짐
-2. **실행계획 오류**: 통계 정보 갱신 안 됨 → 쿼리 플래너가 잘못된 인덱스 선택
-3. **XID Wraparound (최악)**: Transaction ID(32비트)가 약 21억 회 후 순환 → PostgreSQL이 안전 모드로 전환, 쓰기 불가 → 서비스 중단
+PostgreSQL의 Dead Tuple은 MVCC 구현 방식의 직접적인 결과입니다. PostgreSQL은 UPDATE나 DELETE 시 기존 row를 물리적으로 즉시 삭제하지 않고, 해당 row의 `xmax`(해당 row를 삭제·수정한 트랜잭션 ID) 필드에 만료 표시만 남깁니다. 이렇게 하는 이유는 진행 중인 다른 트랜잭션이 이전 버전의 데이터를 읽어야 할 수 있기 때문입니다. VACUUM은 이렇게 쌓인 Dead Tuple을 정리하는 역할을 합니다. 정확히는 OS에 디스크 공간을 반환하는 것이 아니라, 해당 공간을 다음 INSERT/UPDATE에서 재사용 가능한 상태로 표시하는 것입니다. OS에 실제로 공간을 반환하려면 `VACUUM FULL`이 필요한데, 이는 전체 테이블에 배타적 잠금을 걸기 때문에 운영 중에는 사용을 피해야 합니다. 대신 `pg_repack`을 사용하면 잠금을 최소화하면서 온라인으로 테이블을 재구성할 수 있습니다. Autovacuum이 정상적으로 동작하지 않으면 세 가지 심각한 문제가 발생합니다. 첫째는 테이블 Bloat으로, Dead Tuple이 계속 쌓이면 테이블 파일이 비대해지고 Sequential Scan 시 dead page까지 읽어야 하므로 I/O가 증가합니다. 둘째는 실행 계획 오류로, 통계 정보가 갱신되지 않으면 쿼리 플래너가 실제 데이터 분포와 맞지 않는 잘못된 인덱스를 선택할 수 있습니다. 셋째이자 가장 심각한 경우는 XID Wraparound로, Transaction ID가 32비트 정수라 약 21억 회 후에 순환하는데 이 시점이 오면 PostgreSQL이 안전 모드로 전환되어 쓰기가 전면 불가능해지고 서비스가 중단됩니다.
 
 **면접 한 문장:**
 > "PostgreSQL은 MVCC로 UPDATE/DELETE 시 Dead Tuple을 힙에 남기며, VACUUM이 이를 재사용 가능으로 표시합니다. Autovacuum 미실행 시 테이블 Bloat, 실행계획 오류, 최악의 경우 XID Wraparound로 서비스가 중단될 수 있습니다."

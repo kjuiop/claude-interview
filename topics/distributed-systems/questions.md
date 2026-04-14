@@ -77,6 +77,7 @@ CAP 정리는 분산 시스템에서 Consistency, Availability, Partition Tolera
 **핵심 키워드**: Saga Pattern, Choreography, Orchestration, Compensating Transaction, 멱등성(Idempotency), Saga Log Table, 최종 일관성(Eventual Consistency)
 
 **모범 답변 방향**:
+MSA에서 DB가 서비스별로 분리되면 하나의 비즈니스 로직이 여러 로컬 트랜잭션으로 분리됩니다. 결제 서버 네트워크 오류가 발생하면 재고는 이미 차감됐는데 결제는 실패하는 데이터 정합성 붕괴가 생기고, 2PC를 쓰면 전체 서비스에 락이 걸려 가용성을 희생해야 합니다. Saga 패턴은 이 문제를 n개 서비스의 로컬 트랜잭션을 순서대로 실행하고, 실패 시 실패 지점부터 역순으로 보상 트랜잭션을 실행해 최종 일관성을 확보하는 방식으로 해결합니다. 이벤트 기반 통신과 Outbox Pattern을 함께 사용해 비즈니스 로직 커밋과 이벤트 발행을 원자적으로 처리하는 것이 권장됩니다. 구현 방식은 Choreography(안무형)와 Orchestration(지휘형) 두 가지로 나뉩니다. Choreography는 각 서비스가 이벤트를 발행하고 다른 서비스가 구독해 자율적으로 반응하는 방식으로 결합도가 낮고 단순한 Saga에 적합하지만, 전체 흐름 추적이 어렵고 A→B→C→A 같은 순환 의존성 위험이 있습니다. Orchestration은 중앙 Saga Orchestrator가 각 서비스를 순서대로 호출하고 실패 처리를 담당해 디버깅이 쉽고 복잡한 비즈니스 흐름에 적합하며 대부분의 상황에서 권장됩니다. 단, Orchestrator는 순서화만 담당하고 비즈니스 로직을 갖지 않아야 단일 장애점이 되지 않습니다.
 
 **왜 필요한가 — 분산 트랜잭션 문제**:
 - MSA에서 DB가 서비스별로 분리되면 하나의 비즈니스 로직이 여러 로컬 트랜잭션으로 분리됨
@@ -157,23 +158,7 @@ CAP 정리는 분산 시스템에서 Consistency, Availability, Partition Tolera
 | 구현 복잡도 | 낮음 (XA 표준 사용) | 중간 (Try/Confirm/Cancel 상태 구현) | 높음 (보상 트랜잭션 2n개 준비) |
 | MSA 적합성 | 비적합 (가용성 문제) | 적합 (REST 기반 단순 분산 트랜잭션) | 사실상 표준 |
 
-**2PC 상세**:
-- **1단계 (Prepare)**: 코디네이터가 모든 참여 노드에 "커밋 가능?" 요청 → 모두 YES면 진행
-- **2단계 (Commit/Abort)**: 전체 YES → 커밋, 하나라도 NO → 전체 중단
-- **왜 MSA에서 안 쓰나**: 커밋 전까지 전체 노드에 락 → 코디네이터 장애 시 전체 블록. 단일 DB 대비 ~10배 성능 저하 (네트워크 IO + fsync 추가)
-
-**TC/C (Try-Confirm/Cancel) 상세**:
-- **Try**: 모든 서비스에 자원 예약 요청 (실제 커밋 X, 보류 상태)
-- **Confirm**: 전체 Try 성공 → 각 서비스에 실제 작업 실행 요청
-- **Cancel**: Try 중 실패 또는 타임아웃 → 역순으로 예약 취소
-- 2PC와 달리 각 서비스가 별도 트랜잭션 — 락 범위 축소
-- REST 기반 단순 분산 트랜잭션에 적합, 단 상태 관리 테이블 + 피봇(재시도) 로직 구현 필요
-
-**Saga 선택 이유 (MSA 표준)**:
-- 이벤트 기반 비동기 통신 → 서비스 간 느슨한 결합
-- 각 서비스가 독립적으로 실패 처리 → 전체 시스템 장애 전파 없음
-- Outbox Pattern과 결합해 이벤트 발행 신뢰성 확보
-- 단점: 2n개 보상 트랜잭션 준비 부담, 최종 일관성으로 중간 상태 노출
+MSA에서 분산 트랜잭션을 처리하는 세 가지 방식은 각각 일관성과 성능 측면에서 뚜렷한 트레이드오프를 가집니다. 2PC는 코디네이터가 모든 참여 노드에 "커밋 가능?" 요청을 보내고(Prepare 단계), 전체가 YES면 실제 커밋, 하나라도 NO면 전체 롤백하는 방식입니다. 강한 일관성을 보장하지만, 커밋 전까지 모든 노드에 락이 걸리고 코디네이터 장애 시 전체 시스템이 블로킹되는 치명적 약점이 있습니다. 단일 DB 대비 ~10배 성능 저하도 피할 수 없어 MSA 환경에는 적합하지 않습니다. TC/C는 모든 서비스에 자원을 먼저 예약만 하고(Try), 전체 성공 시 실제 실행(Confirm), 실패 시 예약을 역순으로 취소(Cancel)하는 방식입니다. 2PC와 달리 각 서비스가 별도 트랜잭션으로 처리해 락 범위가 좁고, REST 기반 단순 분산 트랜잭션에 적합하지만 상태 관리 테이블과 피봇 재시도 로직을 별도로 구현해야 합니다. MSA에서 사실상 표준이 된 Saga는 이벤트 기반 비동기 통신으로 서비스 간 느슨한 결합을 유지하고, 각 서비스가 독립적으로 실패를 처리해 전체 시스템 장애 전파를 막습니다. Outbox Pattern과 결합하면 이벤트 발행 신뢰성까지 확보할 수 있습니다. 단, 실패 시 역순으로 실행해야 하는 보상 트랜잭션을 최대 2n개 준비해야 하고, 최종 일관성이므로 중간 상태가 외부에 노출될 수 있다는 점을 설계 시 감안해야 합니다.
 
 **꼬리 질문 예시**:
 - 2PC에서 코디네이터가 2단계 커밋 도중 다운되면 어떻게 되나요?
@@ -191,6 +176,7 @@ CAP 정리는 분산 시스템에서 Consistency, Availability, Partition Tolera
 **핵심 키워드**: Outbox Table, Debezium CDC, Idempotency Key, At-Least-Once, Two Generals' Problem
 
 **모범 답변 방향**:
+Transactional Outbox Pattern은 비즈니스 로직과 메시지 발행 사이의 정합성 문제를 해결하는 패턴입니다. Kafka에 직접 발행하면 DB 커밋과 Kafka 발행 사이에 장애가 생겼을 때 둘 중 하나만 성공하는 불일치가 발생합니다. Outbox 패턴은 주문 저장과 Outbox 테이블 insert를 하나의 DB 트랜잭션으로 묶어 원자성을 보장하고, 별도 프로세스가 Outbox 테이블을 읽어 Kafka로 전달합니다. Polling Publisher 방식은 스케줄러가 주기적으로 미발행 이벤트를 SELECT해 Kafka에 발행하고 완료 후 삭제하는 방식으로 구현이 단순하지만 폴링 주기만큼 지연이 생기고 DB에 SELECT 부하가 발생합니다. CDC 방식은 Debezium이 MySQL의 Binlog나 PostgreSQL의 WAL을 실시간으로 읽어 Outbox 테이블 insert를 감지하는 즉시 Kafka로 스트리밍하기 때문에 준실시간 처리가 가능하고 장애 복구 시에도 Kafka offset으로 재처리 위치를 보장합니다. 두 방식 모두 At-least-once로 중복이 발생할 수 있어, 수신 측에서 처리한 이벤트 키를 `processed_events` 테이블에 저장하고 중복 수신 시 스킵하는 멱등성 처리가 필수입니다. Outbox 패턴은 "내가 발행했다"는 사실은 보장하지만 "수신 서비스가 처리했다"는 확인은 두 장군 문제로 인해 이론적으로 보장할 수 없고, 결국 At-least-once + 수신 측 멱등성의 조합이 실무적 최선입니다.
 
 **동작 원리**:
 - **공통**: 주문 저장 + Outbox 테이블 insert를 동일 DB 트랜잭션으로 묶음 → 원자성 보장
@@ -232,6 +218,7 @@ CAP 정리는 분산 시스템에서 Consistency, Availability, Partition Tolera
 **핵심 키워드**: At-most-once, At-least-once, Exactly-once, 두 장군 문제, Effectively-once, 멱등성, 재처리 전략, 중복 제거
 
 **모범 답변 방향**:
+메시지 전달 보장 수준은 At-most-once, At-least-once, Exactly-once 세 가지로 나뉩니다. At-most-once는 재시도 없이 최대 1회만 전달해 유실을 허용하는 방식으로, 로그 수집처럼 일부 유실이 허용되는 분석 이벤트에 적합합니다. At-least-once는 ACK를 받을 때까지 재시도해 최소 1회 전달을 보장하지만 중복이 발생할 수 있어 수신 측에서 멱등성 처리가 필요합니다. Exactly-once는 정확히 1회 전달을 의미하지만, 두 장군 문제처럼 신뢰할 수 없는 네트워크에서 두 시스템이 완전한 합의를 이루는 것은 이론적으로 불가능합니다. 메시지 전달 확인의 확인을 무한히 요구하는 구조이기 때문입니다. 실무에서는 완전한 Exactly-once 대신 Effectively-once를 목표로 합니다. At-least-once 기반으로 재처리 전략, 타임아웃, 멱등성, 중복 제거, 순서 보장 전략을 조합해 Exactly-once에 근접한 보장을 달성하는 방식입니다. 트레이드오프는 보장 수준이 높아질수록 구현 복잡도와 성능 비용이 증가한다는 점이며, 서비스의 비즈니스 요구사항에 맞는 수준을 선택하는 것이 중요합니다.
 
 **3가지 전달 시멘틱**:
 
@@ -279,8 +266,7 @@ At-least-once + 아래 전략의 조합으로 Exactly-once에 *근접*한 보장
 **핵심 키워드**: SIGTERM, SIGKILL, Connection Draining, terminationGracePeriodSeconds, preStop Hook, 무중단 배포
 
 **모범 답변 방향**:
-- **정의**: 프로세스가 종료 신호를 받았을 때 즉시 강제 종료하지 않고, 진행 중인 요청/작업을 완료한 뒤 안전하게 종료하는 방식
-- **필요 이유**: 배포/스케일 다운 시 처리 중인 요청이 강제 중단되면 데이터 불일치, 커넥션 오류, 메시지 유실 발생
+Graceful Shutdown은 프로세스가 종료 신호를 받았을 때 즉시 강제 종료하지 않고, 진행 중인 요청과 작업을 모두 완료한 뒤 안전하게 종료하는 방식입니다. 배포나 스케일 다운 시 처리 중인 요청을 강제로 끊으면 데이터 불일치, 커넥션 오류, 메시지 유실이 발생하기 때문에 운영 환경에서는 반드시 필요합니다.
 
 **동작 흐름 (Kubernetes 기준)**:
 ```
@@ -293,14 +279,7 @@ At-least-once + 아래 전략의 조합으로 Exactly-once에 *근접*한 보장
 ```
 
 **구현 시 주의점**:
-- Dockerfile에서 `CMD`/`ENTRYPOINT`는 **Exec form** (`["app"]`) 사용 — Shell form이면 PID 1이 sh가 되어 SIGTERM이 앱에 전달 안 됨
-- `preStop` 훅: SIGTERM 전에 실행. `sleep 5` 등으로 로드밸런서가 해당 Pod를 트래픽에서 제외할 시간 확보
-- `terminationGracePeriodSeconds`는 처리 최대 시간 + 여유를 감안해 설정
-
-**언어별 구현 (핵심)**:
-- **Go**: `signal.NotifyContext` 또는 `signal.Notify(ch, syscall.SIGTERM)` → goroutine에서 shutdown 트리거
-- **Java(Spring Boot)**: `server.shutdown=graceful` + `spring.lifecycle.timeout-per-shutdown-phase=30s`
-- **공통**: HTTP 서버는 새 연결 거부 후 기존 연결 처리 완료 후 종료
+Dockerfile에서 `CMD`/`ENTRYPOINT`는 반드시 Exec form(`["app"]`)을 사용해야 합니다. Shell form을 쓰면 PID 1이 sh가 되어 SIGTERM이 앱에 직접 전달되지 않습니다. `preStop` 훅은 SIGTERM보다 먼저 실행되므로 `sleep 5` 등으로 로드밸런서가 해당 Pod를 트래픽에서 제외할 시간을 확보할 수 있습니다. `terminationGracePeriodSeconds`는 실제 처리 최대 시간에 여유를 더해 설정해야 하며, 이 시간을 초과하면 SIGKILL로 강제 종료됩니다. Go에서는 `signal.NotifyContext` 또는 `signal.Notify(ch, syscall.SIGTERM)`으로 신호를 감지해 goroutine에서 shutdown을 트리거하고, Spring Boot에서는 `server.shutdown=graceful`과 `spring.lifecycle.timeout-per-shutdown-phase=30s`를 설정해 처리 중인 요청을 완료한 뒤 종료합니다. 공통적으로 HTTP 서버는 신규 연결을 거부한 뒤 기존 연결 처리가 모두 완료된 후 종료해야 합니다.
 
 **꼬리 질문 예시**:
 - Graceful Shutdown 중에도 Liveness Probe는 통과해야 하나요, 실패해야 하나요?
@@ -355,6 +334,7 @@ At-least-once + 아래 전략의 조합으로 Exactly-once에 *근접*한 보장
 **핵심 키워드**: Closed/Open/Half-Open, 장애 전파 방지, Fail Fast, Fallback, resilience4j
 
 **모범 답변 방향**:
+MSA에서 A → B → C로 이어지는 서비스 호출 체인에서 C가 느려지면 B의 스레드가 모두 응답 대기 상태가 되고, A도 연쇄적으로 지연되는 Cascading Failure가 발생합니다. Circuit Breaker는 특정 서비스가 반복적으로 실패할 때 빠르게 차단(Fail Fast)해 이 장애 전파를 막는 패턴입니다. 정상 상태인 Closed에서는 모든 요청을 통과시키며 실패율을 측정하다가, 실패율이 임계치를 초과하면 Open으로 전환해 모든 요청을 즉시 실패 응답으로 반환합니다. 설정한 대기 시간이 지나면 Half-Open 상태로 전환해 일부 요청만 통과시키고, 성공하면 Closed로 복귀하고 실패하면 다시 Open으로 돌아갑니다. Open 상태에서 Fallback 전략으로 기본값이나 캐시 데이터를 반환해 서비스 저하를 우아하게 처리하는 것이 중요합니다.
 
 **왜 필요한가**:
 - MSA에서 A → B → C 서비스 호출 체인에서 C가 느려지면 → B의 스레드가 모두 대기 → A도 연쇄 지연 → **Cascading Failure(장애 전파)**
@@ -401,6 +381,7 @@ At-least-once + 아래 전략의 조합으로 Exactly-once에 *근접*한 보장
 **핵심 키워드**: Token Bucket, Leaky Bucket, Fixed Window, Sliding Window, Redis, 분산 Rate Limiter
 
 **모범 답변 방향**:
+Rate Limiting 알고리즘은 크게 Fixed Window, Sliding Window, Token Bucket, Leaky Bucket 네 가지로 나뉩니다. Fixed Window는 시간 창 단위로 요청 수를 카운트하는 가장 단순한 방식이지만, 창 경계에서 최대 2배 버스트가 허용되는 취약점이 있습니다. 예를 들어 1분에 100회 제한이라면 00:59초에 100회, 01:00초에 다시 100회로 2초 안에 200회가 통과될 수 있습니다. Sliding Window는 현재 시점 기준 과거 N초 요청 수를 카운트해 이 버스트 취약점을 해소하지만 구현이 복잡합니다. Token Bucket은 토큰이 주기적으로 채워지고 요청마다 토큰을 소비하는 방식으로 버킷 크기만큼 버스트를 허용하면서도 평균 처리율을 제한할 수 있어 일반적인 API에 가장 많이 씁니다. Leaky Bucket은 큐에 요청을 쌓고 일정 속도로만 처리해 버스트를 완전히 차단하고 균일한 처리율을 보장합니다. 분산 환경에서는 Redis를 활용하는데, Token Bucket이라면 토큰 수와 마지막 충전 시각을 Redis에 저장하고 Lua Script로 원자적으로 처리하고, Sliding Window라면 Sorted Set으로 요청 타임스탬프를 관리하며 오래된 항목을 주기적으로 제거합니다.
 
 **4가지 알고리즘 비교**:
 
@@ -439,6 +420,7 @@ At-least-once + 아래 전략의 조합으로 Exactly-once에 *근접*한 보장
 **핵심 키워드**: Circuit Breaker, Retry, Timeout, Bulkhead, Rate Limiter, Fallback, resilience4j
 
 **모범 답변 방향**:
+MSA에서 Resilience를 높이기 위한 핵심 패턴은 Timeout, Retry, Circuit Breaker, Bulkhead, Rate Limiter, Fallback 여섯 가지입니다. Timeout은 응답 무한 대기를 방지해 스레드가 묶이는 것을 막는 가장 기본적인 보호 장치입니다. Retry는 일시적 장애에 재시도하되, Exponential Backoff와 Jitter를 함께 써야 모든 인스턴스가 동시에 재시도하는 Thundering Herd 문제를 방지할 수 있습니다. Circuit Breaker는 반복 실패 서비스를 차단해 Cascading Failure를 막고, Bulkhead는 서비스별로 스레드 풀이나 세마포어를 분리해 한 서비스의 장애가 전체로 번지지 않도록 격리합니다. Rate Limiter는 과부하를 방지하고, Fallback은 장애 시 기본값이나 캐시 데이터를 반환해 서비스 저하를 우아하게 처리합니다. 이 패턴들을 체이닝할 때 순서가 중요한데, Retry를 Circuit Breaker 바깥에 두면 Open 상태에서도 재시도해 비효율적이고, Circuit Breaker를 Retry 바깥에 두면 재시도가 실패율 카운트에 포함되어 너무 빨리 Open이 됩니다. 권장 순서는 Rate Limiter → Circuit Breaker → Retry → 외부 서비스입니다.
 
 **Resilience 핵심 패턴**:
 
@@ -474,5 +456,40 @@ At-least-once + 아래 전략의 조합으로 Exactly-once에 *근접*한 보장
 
 > 출처: https://learn.microsoft.com/ko-kr/azure/architecture/patterns/circuit-breaker
 > 출처: https://hudi.blog/circuit-breaker-pattern/
+
+---
+
+## 분산 시스템에서 합의(Consensus)가 필요한 이유는 무엇이고, Raft는 어떻게 동작하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: 네트워크 파티션, quorum, 과반수, 리더 선출, etcd, Kubernetes 클러스터 상태
+
+**핵심 개념**:
+- 문제: 네트워크 파티션 시 노드마다 다른 값 → "어느 값이 진실?" 결정 불가
+- 해결: **과반수(quorum)가 동의한 값만 커밋** → 일관성 보장
+- Raft: 리더가 쓰기 수신 → 과반수 팔로워가 복제 완료 → 커밋 확정
+- 노드 장애: 과반수 생존 → 리더 재선출 후 정상 동작, 과반수 사망 → 쓰기 거부
+
+**etcd와 Kubernetes 연결**:
+- etcd = Raft 기반 분산 KV 저장소 → Kubernetes 클러스터 전체 상태 저장
+- 여러 kube-apiserver가 etcd를 읽어도 항상 동일한 상태 보장 (strong consistency)
+- etcd 3노드 중 1개 사망 → 과반수(2개) 생존 → 정상 동작
+- etcd 3노드 중 2개 사망 → 과반수 손실 → 읽기만 가능, 쓰기 거부
+
+**모범 답변 (3분 이상 말하기 형태)**:
+> 분산 시스템에서 여러 노드가 동일한 상태를 유지해야 할 때 가장 큰 문제는 네트워크 파티션입니다. 노드 간 통신이 잠깐 끊기면 각 노드가 서로 다른 값을 갖게 됩니다. 어느 노드의 값이 정답인지 결정하는 기준이 없으면 각자 자기 값이 맞다고 판단해 시스템 일관성이 깨집니다. 최신 쓰기 시간으로 결정하는 방식도 한계가 있는데, 노드마다 시계가 조금씩 달라서 신뢰할 수 없습니다.
+>
+> Raft 같은 합의 알고리즘은 "과반수(quorum)가 동의한 값만 커밋"하는 방식으로 이 문제를 해결합니다. 한 노드가 리더가 되어 모든 쓰기를 받고, 과반수 이상의 팔로워가 복제 완료했을 때만 커밋으로 확정합니다. 5개 노드에서 3개가 동의해야 커밋되므로, 2개 노드가 죽어도 남은 3개로 계속 동작합니다. 반대로 3개가 죽어서 과반수를 잃으면 데이터 일관성을 보장할 수 없으므로 쓰기를 거부합니다. 가용성보다 일관성을 우선하는 CP 시스템의 특성입니다.
+>
+> etcd가 Kubernetes에서 사용되는 이유가 바로 여기에 있습니다. etcd는 Raft 기반의 분산 키-값 저장소로, Kubernetes 클러스터의 모든 상태, Pod 목록, Deployment 설정, Service 정의, ConfigMap 등을 저장합니다. etcd가 strong consistency를 보장하기 때문에 여러 kube-apiserver가 동시에 etcd를 읽어도 항상 동일한 클러스터 상태를 봅니다. etcd 노드 중 일부가 죽어도 과반수가 살아있다면 리더를 새로 선출해서 계속 동작하고, 과반수를 잃으면 읽기만 허용하고 쓰기는 거부합니다.
+
+**꼬리 질문 예시**:
+- etcd가 3노드인데 2개가 죽으면 Kubernetes는 어떻게 되나요? (기존 상태 조회만 가능, 새 배포·스케일링 불가)
+- Raft 리더가 죽으면 어떤 과정으로 새 리더가 선출되나요? (Election Timeout 만료 → Candidate → 과반수 투표 획득 → Leader)
+
+**면접 세션 피드백 (2026-04-13 2회차)**:
+- 답변 없음 (주제 자체 모름) — 다음 세션에서 우선 출제 필요
+- 핵심 암기 포인트: 과반수 quorum, 리더 선출, etcd = K8s 상태 저장소, 과반수 손실 시 쓰기 거부
 
 ---

@@ -57,6 +57,19 @@ Go GC는 **Concurrent tri-color mark-and-sweep** 방식으로 동작한다.
 - STW는 **루트 스캔 시작**과 **최종 정리** 순간에만 발생
 - Concurrent marking 중 포인터 변경 → **Write Barrier**로 추적
 
+### GC 문제 확인 방법
+
+```bash
+# GC 빈도, STW 시간 실시간 로그 출력
+GODEBUG=gctrace=1 ./your-service
+
+# heap 프로파일로 allocation 집중 위치 확인
+go tool pprof http://localhost:6060/debug/pprof/heap
+```
+
+- `gctrace=1`: `gc 1 @0.5s 2%: 0.1+1.2+0.3 ms clock, 힙 증감` 형태로 출력
+- 먼저 측정(gctrace → pprof) → 원인 파악 → 최적화 순서로 접근
+
 ### GC pressure 최적화 패턴
 
 ```go

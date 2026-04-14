@@ -51,12 +51,12 @@ updated: 2026-04-12
 
 ## 다음 우선순위
 
-1. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습 (오늘 6회차 중단)
-2. `kotlin/concepts.md` — 내용 없음, 신규 작성 필요
-3. `kubernetes/Istio` — Ambient Mode(sidecar-less, Istio 1.24+) 심화 암기
-4. `networking` — Forward Secrecy(ECDHE ephemeral key pair 생성 원리) 완성
-5. `elasticsearch` — 공고 요구사항, 미정리
-6. `kotlin` — suspend fun Continuation, Dispatcher 타입
+1. `kafka` — commitAsync 재시도 순서(최신 offset만), max.poll.interval.ms 튜닝, exactly-once transactional API (2026-04-14 세션 교정 완료 항목)
+2. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습
+3. `kotlin/concepts.md` — 내용 없음, 신규 작성 필요
+4. `kubernetes/Istio` — Ambient Mode(sidecar-less, Istio 1.24+) 심화 암기
+5. `networking` — Forward Secrecy(ECDHE ephemeral key pair 생성 원리) 완성
+6. `elasticsearch` — 공고 요구사항, 미정리
 
 ---
 
@@ -65,7 +65,7 @@ updated: 2026-04-12
 | 회사 | 세션 수 | 마지막 피드백 요약 |
 |---|---|---|
 | 화이트큐브 | 8 | 2026-04-12 세션(총 6회차) — Go Map/sync.Map/Hexagonal/Redis AOF 전부 교정 완료. K8s StatefulSet·2PC 신규 교정. GC Tricolor 색상 정의 여전히 불완전 — 내일 최우선 복습 |
-| 넵튠 | 3 | 오늘 세션 포함 — Kafka offset, 광고 파이프라인, Rate Limiting |
+| 넵튠 | 4 | 2026-04-14 세션(1회차) — Go channel fan-out 원리 완성. Kafka max.poll.interval.ms·commitAsync 재시도 순서 교정. 광고 파이프라인 ZooKeeper Watch 연결 강점. 공통 보완: 코드 직접 제시 부재, Redis 장애 fallback 누락 |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---

@@ -16,10 +16,8 @@ related: [mysql, postgresql]
 **핵심 키워드**: 역인덱스, Term Dictionary, Posting List, Analyzer, 형태소 분석, Full-Text Search
 
 **모범 답변 방향**:
-- 역인덱스 = "단어 → 문서 ID 목록" 매핑 구조 설명
-- Analyzer가 저장 시점에 형태소 분리 → 각 토큰을 Term Dictionary 키로 등록
-- RDBMS LIKE `%keyword%`는 Full Scan, ES는 Term Dictionary 조회 → 속도 차이 설명
-- 선택 기준: 정형 데이터/ACID → RDBMS, 비정형 텍스트 검색/형태소/오타 → ES
+
+역인덱스는 "단어 → 문서 ID 목록" 방향으로 저장하는 자료구조입니다. RDBMS가 행(Row)에 데이터를 저장하는 것과 반대 방향으로, ElasticSearch는 문서를 저장할 때 Analyzer가 텍스트를 형태소 단위로 분리해 각 토큰을 Term Dictionary의 키로 등록하고, 해당 토큰이 어떤 문서 ID에 등장하는지를 Posting List로 관리합니다. 검색 시에는 쿼리 키워드를 Term Dictionary에서 이진 탐색(O(log N))으로 찾아 Posting List를 즉시 반환합니다. RDBMS의 `LIKE '%keyword%'`는 인덱스를 사용하지 못하고 전체 행을 순차 스캔(O(N))하는 반면, ES는 이미 분리된 토큰 목록에서 조회하므로 수억 건 규모에서도 빠릅니다. 기술 선택 기준으로는 ACID 트랜잭션이 필요한 정형 데이터, 정확한 조건 필터링이 중심이라면 RDBMS가 적합하고, 형태소 분석·오타 허용·자동완성처럼 비정형 텍스트 검색이 핵심이라면 ES를 선택합니다.
 
 **꼬리 질문 예시**:
 - "ES가 RDBMS보다 항상 빠른가요?" → 정확한 조건 필터(WHERE id = 123)는 RDBMS가 빠름. ES는 텍스트 검색에 특화.
@@ -81,10 +79,8 @@ related: [mysql, postgresql]
 **핵심 키워드**: Analyzer, Character Filter, Tokenizer, Token Filter, BM25, TF, IDF, 관련성 점수
 
 **모범 답변 방향**:
-- **색인 시**: 텍스트 → Analyzer 파이프라인(Character Filter → Tokenizer → Token Filter) → 토큰 → 역인덱스 등록
-- **검색 시**: 쿼리도 동일 Analyzer로 분석 → Term Dictionary 이진 탐색 O(log N) → Posting List 조회
-- **관련성 점수**: BM25 알고리즘 — TF(출현 빈도, 포화 적용) × IDF(희소 단어 우대) × 문서 길이 정규화
-- RDBMS LIKE `%keyword%` 비교: Full Scan O(N) vs Term Dictionary 조회 O(log N)
+
+전문 검색은 색인(Indexing)과 검색(Query) 두 단계로 동작합니다. 색인 시에는 저장할 텍스트가 Analyzer 파이프라인을 통과합니다. 파이프라인은 Character Filter(HTML 태그 제거, 특수문자 치환) → Tokenizer(공백·형태소 기준 토큰 분리) → Token Filter(소문자화, 불용어 제거, 동의어 처리) 순서로 처리되며, 각 토큰이 역인덱스에 등록됩니다. 검색 시에는 쿼리 텍스트도 동일한 Analyzer로 분석해 검색 토큰을 만들고, Term Dictionary에서 이진 탐색(O(log N))으로 조회한 뒤 Posting List에서 문서 ID 목록을 가져옵니다. 이후 BM25 알고리즘으로 관련성 점수를 계산해 내림차순으로 정렬합니다. BM25는 TF(문서 내 단어 출현 빈도, 일정 횟수 이상은 포화 효과 적용) × IDF(전체 문서 중 희소한 단어일수록 가중치) × 문서 길이 정규화의 조합입니다. RDBMS의 `LIKE '%keyword%'`는 인덱스를 사용하지 못해 O(N) 전체 스캔인 반면, ES는 Term Dictionary 이진 탐색으로 O(log N)에 처리할 수 있다는 점이 핵심 차이입니다.
 
 **Analyzer 파이프라인 순서 암기**:
 ```
@@ -108,12 +104,8 @@ Character Filter → Tokenizer → Token Filter
 **핵심 키워드**: Hot/Warm/Cold Phase, ILM, Rollover, Shrink, Forcemerge, Freeze, node.attr, 비용 최적화
 
 **모범 답변 방향**:
-- **배경**: 시계열 데이터(로그/메트릭)는 시간이 지날수록 접근 빈도 감소 → 노드를 성능 등급별 분리
-- **Hot**: 신규 색인 + 활발한 검색 → 고성능 SSD 노드, 우선순위 50
-- **Warm**: 7일 경과 → Shrink(샤드 축소) + Forcemerge(세그먼트 병합) → 중간 사양 노드, 우선순위 25
-- **Cold**: 30일 경과 → Freeze(메모리 해제) → 대용량 저가 노드, 우선순위 0
-- **Delete**: 60일 경과 → 자동 삭제로 저장 비용 관리
-- ILM 정책에서 `min_age` + Action 조합으로 자동 전환
+
+Hot-Warm-Cold 아키텍처는 시계열 데이터(로그, 메트릭)가 시간이 지날수록 접근 빈도가 줄어드는 특성을 활용해 노드를 성능 등급별로 분리하는 비용 최적화 전략입니다. Hot 단계는 신규 색인과 활발한 검색이 일어나는 구간으로 고성능 SSD 노드에 인덱스 우선순위 50을 부여합니다. 7일이 경과하면 Warm 단계로 전환되며, 이 때 Shrink로 Primary Shard 수를 축소하고 Forcemerge로 Lucene 세그먼트를 병합해 검색 성능을 최적화한 뒤 중간 사양 노드로 이동합니다. 30일이 지나면 Cold 단계로 Freeze 처리해 메모리에서 인덱스를 해제하고, 대용량 저가 HDD 노드에서 관리합니다. 60일 이후에는 Delete 단계로 인덱스를 자동 삭제해 저장 비용을 통제합니다. ILM(Index Lifecycle Management) 정책에서 각 단계의 `min_age`와 Action 조합으로 자동 전환이 이루어지며, `GET /<index>/_ilm/explain` API로 현재 단계를 확인할 수 있습니다.
 
 **핵심 Action 암기**:
 
@@ -140,10 +132,8 @@ Character Filter → Tokenizer → Token Filter
 **핵심 키워드**: primary shard, replica shard, refresh interval, bulk indexing, mapping
 
 **모범 답변 방향**:
-- primary shard: 데이터 분산 저장 단위, 한 번 설정하면 변경 불가
-- replica shard: 가용성/읽기 성능 향상용 복제본
-- 성능 저하 원인: 샤드 과다, dynamic mapping, 집계 쿼리 남용
-- 최적화: 인덱스 매핑 명시, refresh_interval 조정, bulk API 사용
+
+샤드 설계는 ElasticSearch 성능의 기반입니다. Primary Shard는 인덱스를 물리적으로 분할하는 단위로 각 샤드가 독립적인 Lucene 인스턴스이며, 인덱스 생성 이후에는 변경이 불가능합니다. 변경이 필요하다면 새 인덱스로 Reindex해야 합니다. Replica Shard는 Primary의 복사본으로 노드 장애 시 가용성을 보장하고 읽기 요청을 분산해 읽기 성능을 높입니다. 성능 저하의 주요 원인은 샤드 수 과다(Small Shard Problem: 데이터가 적은데 샤드가 많으면 쿼리 코디네이션 비용 증가), dynamic mapping(필드 타입이 자동 추론되어 불필요한 색인 발생), 집계 쿼리 남용 등입니다. 최적화 방법으로는 인덱스 매핑을 명시적으로 정의하고, 대량 색인 시 refresh_interval을 늘려 세그먼트 생성 빈도를 줄이며, Bulk API로 배치 색인하는 방법이 있습니다. Elastic에서 권장하는 샤드 크기는 하나당 10~50GB입니다.
 
 **꼬리 질문 예시**:
 - "primary shard를 몇 개로 설정해야 하나요?" → 단일 샤드 권장 크기 10~50GB, 노드 수 × 1~3배

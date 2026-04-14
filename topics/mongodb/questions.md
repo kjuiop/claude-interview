@@ -126,9 +126,8 @@ db.messages.aggregate([
 **핵심 키워드:** 복합 인덱스, 선행 키, ESR Rule (Equality-Sort-Range)
 
 **모범 답변 방향:**
-- "특정 채팅방의 시간 범위 조회" 패턴: `(roomId, createdAt)` 복합 인덱스
-- roomId가 선행 키 — Equality 조건이 먼저, Range 조건이 뒤에 오는 것이 원칙
-- `(createdAt, roomId)` 순서는 비효율: createdAt으로 전체 범위 스캔 후 roomId 필터링
+
+채팅 메시지 조회의 주요 패턴은 "특정 채팅방의 최근 메시지를 시간 역순으로 가져오는 것"으로, 이 패턴에 최적화된 인덱스는 `(roomId, createdAt)` 복합 인덱스입니다. 인덱스 필드 순서 원칙은 ESR Rule로, Equality 조건이 선행 키로, Sort 기준이 그 다음, Range 조건이 마지막에 오는 것이 권장됩니다. roomId가 선행 키인 이유는 roomId는 정확한 같음(Equality) 조건으로 우선 필터링하고, createdAt은 그 결과 내에서 정렬 또는 범위 조회를 하기 때문입니다. 만약 `(createdAt, roomId)` 순서로 설정하면 createdAt 전체 범위를 먼저 스캔한 뒤 roomId로 필터링해야 하므로 훨씬 비효율적입니다. 실제로 `db.messages.createIndex({ roomId: 1, createdAt: -1 })`와 같이 설정하면 특정 방의 최신순 조회가 인덱스만으로 처리됩니다.
 
 ```js
 db.messages.createIndex({ roomId: 1, createdAt: -1 })

@@ -41,6 +41,10 @@ related: [kafka, distributed-systems, aws]
   - `#` 신규 암기: **0개 이상** 단어. `order.#`는 `order`, `order.create`, `order.create.success` 모두 매칭
   - 선택 기준 한 문장: "Direct는 정확한 1:1 라우팅, Topic은 패턴으로 여러 서비스에 유연하게 분배"
 
+**면접 세션 피드백 (2026-04-13 2회차)**:
+- 잘한 점: 4가지 Exchange 타입 정확히 구분. Topic 선택 이유(`ad.click`, `ad.#` 패턴 예시) 실용적. Kafka 비교에서 append-only 로그·파티션 수평확장·consumer group 독립 오프셋·재처리 키워드 모두 언급. 트랜스코딩/자막추출/암호화 실무 경험 연결 자연스럽고 설득력 있음.
+- 보완: manual ACK/NACK + DLQ 조합 추가 ("트랜스코딩 실패 시 NACK → DLQ → 재처리" 패턴). Kafka 재처리 구체화 ("오프셋 리셋 → 집계 버그 수정 후 재집계").
+
 ---
 
 ## RabbitMQ Dead Letter Exchange 활용 패턴
@@ -50,9 +54,7 @@ related: [kafka, distributed-systems, aws]
 **핵심 키워드**: DLX, Dead Letter Queue, nack, requeue, TTL, 재처리
 
 **모범 답변 방향**:
-- 처리 실패 메시지를 DLX → DLQ로 라우팅하여 유실 방지
-- 재처리 로직 또는 모니터링/알림 연계
-- TTL 만료 메시지도 DLX로 이동 가능
+Dead Letter Exchange는 RabbitMQ에서 처리에 실패하거나 TTL이 만료된 메시지를 유실시키지 않고 별도 큐로 보내는 패턴입니다. Consumer가 메시지를 처리하다 오류가 발생하면 `nack(requeue=false)`를 호출하고, 해당 메시지는 DLX를 거쳐 Dead Letter Queue로 라우팅됩니다. requeue=true를 사용하면 메시지가 원래 큐 앞으로 돌아와 무한 재시도 루프가 발생할 수 있어 실무에서는 DLX 연계가 안전합니다. TTL이 만료된 메시지도 동일하게 DLX로 이동하기 때문에, 한 번의 DLX 설정으로 실패와 만료를 모두 처리할 수 있습니다. DLQ에 쌓인 메시지는 별도 Consumer가 모니터링·알림을 보내거나, 원인 분석 후 원래 큐에 재발행하는 방식으로 처리합니다. 트레이드오프는 DLX 설정이 없으면 메시지가 단순히 버려지거나 무한 루프에 빠지지만, DLX를 도입하면 운영 복잡도가 높아지고 DLQ도 주기적으로 관리해야 한다는 점입니다.
 
 **꼬리 질문 예시**:
 - "DLX 없이 nack하면 어떻게 되나요?" → requeue=true면 큐 앞으로 돌아와 무한 재시도 루프 발생 위험

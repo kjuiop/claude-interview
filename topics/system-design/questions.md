@@ -13,25 +13,9 @@ related: [redis, kafka, kubernetes, golang, distributed-systems]
 
 ### Q. CQRS 패턴을 설명하고, 두 모델 간 동기화와 Eventual Consistency 허용 시 stale 대응 방법을 설명해주세요.
 
-**핵심 답변 포인트:**
+**모범 답변 방향**:
 
-**분리 레벨 (면접관이 기대하는 수준)**
-- 코드 레벨: 같은 DB, Command/Query 처리 경로만 분리
-- 저장소 레벨: 쓰기 DB(PostgreSQL) + 읽기 DB(Redis/Elasticsearch) 물리적 분리
-
-**이점:**
-- 읽기 저장소만 수평 확장 → 비용 효율적
-- 쓰기는 트랜잭션/정합성 우선 스펙 집중, 읽기는 트래픽에 맞게 분산
-
-**동기화 패턴 (이름 함께 언급):**
-- **Event-Driven CQRS**: 쓰기 모델 → Kafka 이벤트 발행 → 읽기 모델 구독·업데이트
-- **CDC(Change Data Capture)**: Debezium이 binlog 캡처 → 읽기 저장소 반영
-
-**stale 데이터 대응 (4가지):**
-1. 정합성 중요 데이터(결제·잔액) → **Command DB에서 직접 읽기**
-2. 지연 허용 데이터 → **"반영까지 N초 소요" 사용자 안내**
-3. **Optimistic Update**: 클라이언트가 쓰기 결과를 즉시 UI에 반영, 이후 서버 확인으로 보정
-4. 쓰기 응답에 **버전/타임스탬프 포함** → 클라이언트가 해당 버전 이상 요청(read-your-writes)
+CQRS는 Command와 Query의 책임을 분리하는 패턴으로, 분리 수준에 따라 두 가지로 나뉩니다. 코드 레벨 분리는 같은 DB를 쓰면서 Command(쓰기)와 Query(읽기) 처리 경로만 분리하는 것이고, 저장소 레벨 분리는 쓰기 DB(PostgreSQL)와 읽기 DB(Redis, Elasticsearch)를 물리적으로 나누는 방식입니다. 저장소 수준으로 분리하면 읽기 저장소만 수평 확장해서 트래픽을 수용할 수 있고, 쓰기는 트랜잭션과 정합성에 집중하고 읽기는 조회 성능에 최적화할 수 있습니다. 두 저장소의 동기화 방식으로는 Event-Driven CQRS와 CDC 두 가지가 있습니다. Event-Driven CQRS는 쓰기 모델이 Kafka 이벤트를 발행하면 읽기 모델이 구독해서 업데이트하는 방식이고, CDC(Change Data Capture)는 Debezium 같은 도구가 binlog를 캡처해서 읽기 저장소에 자동으로 반영하는 방식입니다. 두 저장소 간에는 불가피하게 전파 지연이 생기는데, stale 데이터 대응 방법은 상황에 따라 네 가지가 있습니다. 결제나 잔액처럼 정합성이 중요한 경우에는 읽기 저장소를 거치지 않고 Command DB에서 직접 읽습니다. 지연이 허용되는 경우에는 사용자에게 "반영까지 N초 소요"를 안내하는 것으로 충분합니다. 즉각적인 UX가 필요한 경우에는 클라이언트가 쓰기 결과를 즉시 UI에 반영하고 이후 서버 응답으로 보정하는 Optimistic Update 방식을 씁니다. 마지막으로 쓰기 응답에 버전이나 타임스탬프를 포함시키고 클라이언트가 해당 버전 이상을 요청하는 read-your-writes 패턴도 활용할 수 있습니다.
 
 **이력서 연결:**
 > "카테노이드 채팅 서버에서 메시지 저장은 PostgreSQL에 쓰고, 채팅방 목록/최근 메시지 미리보기는 Redis에 캐시하는 구조로 분리했다면 5,000 동시접속에서 가장 빈번한 조회 트래픽을 Command DB와 분리해 부하를 줄일 수 있었을 것입니다."
@@ -125,33 +109,7 @@ related: [redis, kafka, kubernetes, golang, distributed-systems]
 
 **모범 답변 방향**:
 
-**Token Bucket:**
-- 버킷에 토큰이 일정 속도로 채워짐 (예: 초당 10개)
-- 요청 1건 = 토큰 1개 소비. 토큰 없으면 요청 거부
-- 장점: 순간 burst 허용 (버킷에 쌓인 토큰만큼), 구현 단순
-- 단점: 정확한 요청 수 추적 어려움
-
-**Sliding Window Log:**
-- 요청마다 타임스탬프를 저장
-- 현재 시간 기준 윈도우(예: 1분) 내 요청 수 카운트 → 초과 시 거부
-- 장점: 정확한 요청 수 추적, 경계 시점 burst 없음
-- 단점: 모든 요청 타임스탬프 저장 → 메모리 비용 높음
-
-**Fixed Window 비교:**
-- 가장 단순하지만 경계 시점에 2배 burst 허용 (59초 + 00초에 각 100개)
-
-**실무 구현:**
-```
-Token Bucket → Redis + Lua 스크립트 (원자적 처리)
-Sliding Window Log → Redis Sorted Set (score = timestamp)
-  ZADD key timestamp requestId
-  ZREMRANGEBYSCORE key 0 (now - window)
-  ZCARD key  → 현재 요청 수
-API Gateway → Nginx, Kong, AWS API Gateway 내장 rate limiter 활용
-```
-
-**트레이드오프 한 문장:**
-> "Token Bucket은 burst 허용과 단순 구현이 장점, Sliding Window Log는 정확하지만 메모리 비용. 실무에서는 Redis Sorted Set으로 Sliding Window를 구현하거나 API Gateway 내장 기능 활용."
+Rate Limiting 알고리즘을 선택할 때는 burst 허용 여부와 메모리 트레이드오프를 기준으로 판단합니다. Fixed Window는 구현이 가장 단순하지만 경계 burst라는 치명적인 약점이 있습니다. 1분에 100번 허용이라면 59초에 100번, 다음 윈도우 첫 1초에 100번이 통과되면 2초 안에 200번이 처리되는 구간이 생겨 실질적으로 정책이 두 배까지 위반됩니다. Token Bucket은 버킷에 초당 N개씩 토큰을 채우고 요청마다 1개씩 소비하는 방식입니다. 버킷이 꽉 찬 상태에서는 평소에 적게 쓴 만큼 몰아서 요청을 처리할 수 있는 burst 허용이 특징입니다. API 특성상 일시적인 트래픽 급증을 허용해야 하는 서비스에 적합하며, Redis에서는 `{last_refill_time, token_count}` 두 필드를 Hash에 저장하고 Lua 스크립트로 refill과 차감을 원자적으로 처리합니다. Sliding Window Log는 Sorted Set에 요청마다 타임스탬프를 score로 저장하고, `ZREMRANGEBYSCORE`로 윈도우 밖 항목을 제거한 뒤 `ZCARD`로 현재 요청 수를 세는 방식입니다. Fixed Window의 경계 burst 문제가 없고 가장 정밀하지만, 모든 요청의 타임스탬프를 저장해야 하므로 트래픽이 많을수록 메모리 비용이 선형으로 증가합니다. 실무에서는 API Gateway에서 1차로 대략적으로 거르고, 결제나 인증처럼 중요한 엔드포인트는 Redis로 정밀하게 제어하는 조합을 씁니다. 분산 환경에서는 각 서버의 로컬 카운터를 합산할 수 없으므로 Redis를 글로벌 레이어로 두고 모든 서버가 같은 카운터를 참조해야 일관성이 보장됩니다.
 
 **꼬리 질문 예시:**
 - "분산 서버 환경에서 rate limit을 어떻게 공유하나요?" → Redis 중앙 집중식 카운터, 또는 각 서버 로컬 카운터 + 주기적 동기화(느슨한 제한 허용)

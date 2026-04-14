@@ -315,11 +315,9 @@ Go의 인터페이스는 **암시적 구현**이다. `*gin.Context`가 `context.
 
 **핵심 키워드**: HandlersChain, index, c.Next(), 양파 모델
 
-**모범 답변 방향**:
-- `gin.Engine.ServeHTTP` → 라우터 매칭 → `HandlersChain` 슬라이스 결정
-- `c.Next()` 호출 시 index를 증가시키며 다음 핸들러를 순차 실행
-- `c.Next()` 이전 코드 = 전처리, 이후 코드 = 후처리 (양파 모델)
-- 체인이 모두 소진되면 ResponseWriter가 flush되어 응답 반환
+**모범 답변**:
+
+Gin의 미들웨어 실행 흐름은 HandlersChain이라는 슬라이스를 중심으로 동작합니다. HTTP 요청이 들어오면 `gin.Engine.ServeHTTP`가 httprouter 기반으로 라우터를 매칭하고, 해당 경로에 등록된 전역 미들웨어 + 그룹 미들웨어 + 라우트 핸들러를 하나의 HandlersChain 슬라이스로 결합합니다. 실행은 `c.index`라는 int8 값을 증가시키면서 슬라이스를 순서대로 호출하는 방식입니다. 각 미들웨어에서 `c.Next()`를 호출하면 index가 증가하며 다음 핸들러가 실행됩니다. `c.Next()` 이전 코드가 전처리, `c.Next()` 이후 코드가 후처리로 동작하기 때문에 미들웨어가 요청 전과 응답 후 모두에 개입하는 양파 모델이 완성됩니다. 체인이 모두 소진되면 ResponseWriter가 flush되어 클라이언트에 응답이 반환됩니다.
 
 **꼬리 질문**:
 - `c.Next()`를 호출하지 않으면 어떻게 되나요?
@@ -333,10 +331,9 @@ Go의 인터페이스는 **암시적 구현**이다. `*gin.Context`가 `context.
 
 **핵심 키워드**: index = abortIndex, 체인 중단, 현재 미들웨어 실행
 
-**모범 답변 방향**:
-- `return` 만 사용하면 현재 함수는 종료되지만 `c.Next()`가 루프를 계속 돌며 다음 핸들러를 실행함
-- `c.Abort()`는 index를 `abortIndex(63)`으로 설정해 이후 모든 핸들러 실행을 막음
-- 인증 실패, 권한 없음 등 체인을 완전히 끊어야 할 때 `c.Abort()` 또는 `c.AbortWithStatusJSON()` 사용
+**모범 답변**:
+
+`return`과 `c.Abort()`는 동작 범위가 다릅니다. 미들웨어에서 `return`만 사용하면 현재 함수는 종료되지만, `c.Next()`가 루프 방식으로 구현되어 있기 때문에 루프가 계속 돌면서 다음 핸들러들이 그대로 실행됩니다. 반면 `c.Abort()`는 `c.index`를 내부 상수인 `abortIndex(63)`으로 설정해버려서, 이후의 모든 핸들러를 건너뛰고 체인을 완전히 중단시킵니다. 단, `c.Abort()` 이후에도 현재 미들웨어 함수 내부의 남은 코드는 계속 실행되므로, 응답을 보낸 뒤에는 명시적으로 `return`까지 함께 써야 합니다. 인증 실패나 권한 없음처럼 이후 핸들러를 아예 실행해서는 안 되는 상황에서는 반드시 `c.Abort()` 또는 응답까지 함께 보내는 `c.AbortWithStatusJSON()`을 사용해야 합니다.
 
 **꼬리 질문**:
 - `c.Abort()` 이후에도 현재 미들웨어 코드가 실행되는 이유는?
@@ -350,10 +347,9 @@ Go의 인터페이스는 **암시적 구현**이다. `*gin.Context`가 `context.
 
 **핵심 키워드**: Logger, Recovery, 커스텀 미들웨어
 
-**모범 답변 방향**:
-- `gin.Default()` = `gin.New()` + Logger + Recovery 자동 등록
-- 실무에서는 `gin.New()`로 시작해 필요한 미들웨어만 직접 `Use()` 등록
-- 이유: 커스텀 로거 (Zap 등) 사용, 별도 panic 핸들러, 불필요한 로그 제거
+**모범 답변**:
+
+`gin.Default()`는 `gin.New()`에 Logger와 Recovery 미들웨어를 자동으로 등록한 편의 생성자입니다. 빠른 프로토타입 개발이나 테스트 환경에서는 편리하지만, 실무에서는 `gin.New()`로 시작해 필요한 미들웨어만 직접 `Use()`로 등록하는 방식이 일반적입니다. 이유는 세 가지입니다. 첫째, 기본 Logger는 stdout에 텍스트 형식으로 출력하는데, 실무에서는 구조화 로깅을 위해 Zap이나 zerolog 같은 커스텀 로거를 사용합니다. 둘째, Recovery 미들웨어도 팀의 에러 리포팅 시스템이나 Sentry와 연동하는 커스텀 버전이 필요한 경우가 많습니다. 셋째, 불필요한 미들웨어는 매 요청마다 오버헤드를 발생시키므로 실제로 필요한 것만 등록하는 편이 낫습니다.
 
 ---
 
@@ -363,10 +359,9 @@ Go의 인터페이스는 **암시적 구현**이다. `*gin.Context`가 `context.
 
 **핵심 키워드**: c.Copy(), race condition, Context 수명
 
-**모범 답변 방향**:
-- `*gin.Context`는 요청 처리가 끝나면 pool로 반환됨 → 비동기 goroutine에서 접근 시 race condition
-- `c.Copy()`로 Context를 복사해 goroutine에 전달해야 안전
-- 복사본은 `c.Next()`, `c.Abort()` 등 체인 제어 불가 (읽기 전용으로 사용)
+**모범 답변**:
+
+미들웨어나 핸들러에서 goroutine을 띄울 때 `*gin.Context`를 그대로 goroutine에 넘기면 race condition이 발생할 수 있습니다. `*gin.Context`는 요청 처리가 완료되면 Gin 내부 pool로 반환되어 재사용되는데, 비동기 goroutine이 이 시점에도 해당 Context에 접근하면 이미 다른 요청이 사용 중인 Context를 건드리는 상황이 됩니다. 올바른 방법은 `c.Copy()`로 Context의 스냅샷을 만들어 goroutine에 전달하는 것입니다. 복사본은 `c.Next()`나 `c.Abort()` 같은 체인 제어 메서드를 사용할 수 없어 읽기 전용으로만 활용해야 하지만, 요청 데이터와 파라미터에는 안전하게 접근할 수 있습니다. 또한 goroutine 내에서 응답을 쓰는 것도 금물인데, 핸들러가 이미 응답을 완료한 뒤 goroutine이 `c.JSON()`을 호출하면 헤더 중복 쓰기 오류가 발생합니다.
 
 **꼬리 질문**:
 - `c.Set`/`c.Get`은 thread-safe한가요?
@@ -378,11 +373,9 @@ Go의 인터페이스는 **암시적 구현**이다. `*gin.Context`가 `context.
 
 **핵심 키워드**: context.Context 인터페이스, c.Request.Context(), 레이어 분리, Done() nil
 
-**모범 답변 방향**:
-- `context.Context`는 4개 메서드를 요구하는 인터페이스. gin 버전에 따라 `*gin.Context`가 이를 완전 구현 안 할 수 있어 컴파일 에러 발생
-- 구현해도 `Done()`이 nil 반환 → 요청 취소 신호 전파 안 됨 → 런타임 버그
-- 올바른 방법: `c.Request.Context()` — HTTP 요청에 붙은 표준 context 사용
-- 레이어 분리 원칙: Service/Repository는 `context.Context`만 알아야 함. `*gin.Context`를 내려보내면 Gin 의존성이 생겨 테스트 어려워짐
+**모범 답변**:
+
+`*gin.Context`를 `context.Context` 파라미터에 그대로 넘기면 두 가지 문제가 생깁니다. 첫째, `context.Context`는 `Deadline()`, `Done()`, `Err()`, `Value()` 4개 메서드를 요구하는 인터페이스인데, 구버전 Gin에서는 `*gin.Context`가 이를 완전히 구현하지 않아 컴파일 에러가 발생합니다. 둘째, v1.7.7 이후 Gin은 4개 메서드를 구현하지만 `Done()`이 nil을 반환하기 때문에, 컴파일은 통과해도 클라이언트 연결이 끊겨도 취소 신호가 전파되지 않는 런타임 버그가 생깁니다. 올바른 방법은 핸들러 레이어에서 `c.Request.Context()`로 표준 `context.Context`를 추출해 서비스 레이어로 넘기는 것입니다. `http.Request.Context()`는 클라이언트 연결이 끊기면 자동으로 취소되므로 DB 쿼리나 외부 API 호출이 클라이언트 상태에 반응할 수 있습니다. 레이어 분리 측면에서도 Service와 Repository는 `context.Context`만 알아야 합니다. `*gin.Context`를 서비스 레이어까지 내려보내면 Gin에 대한 의존성이 생겨 단위 테스트에서 `*gin.Context`를 직접 생성해야 하는 번거로움이 발생하고 레이어 경계가 무너집니다.
 
 **꼬리 질문**:
 - `c.Request.Context()`와 `context.Background()`의 차이는 무엇인가요?

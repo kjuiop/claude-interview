@@ -200,6 +200,28 @@ related: [redis/concepts]
 
 ---
 
+## Redis Sorted Set(ZSet)의 시간 복잡도와 Set/List/ZSet 선택 기준은 무엇인가요?
+
+**난이도**: 기초
+
+**핵심 키워드**: ZADD O(log N), ZRANGE O(log N+M), score, 중복 불가, 정렬, 랭킹, 최근 본 상품
+
+**모범 답변 (3분 이상 말하기 형태)**:
+
+> Redis Sorted Set은 score를 기준으로 자동 정렬되는 자료구조입니다. ZADD는 skiplist에서 정렬 위치를 찾아 삽입하기 때문에 O(log N), ZRANGE와 ZRANGEBYSCORE는 O(log N + M)입니다. M은 반환되는 원소 수입니다. 실시간 랭킹처럼 순위 기반 범위 조회가 필요하고, 동일 유저가 중복 집계되면 안 되는 경우에 ZSet을 씁니다. Set은 순서가 없어 범위 조회가 불가능하고, List는 중복을 허용하기 때문에 중복 없이 정렬 상태가 필요한 경우에는 ZSet이 유일한 선택입니다. 수백만 건으로 커질 때는 시간 단위로 키를 분리해서 `ranking:daily:2026-04-13` 형태로 관리하고, `ZREMRANGEBYSCORE`로 만료 데이터를 주기적으로 정리합니다. 도메인별로 키를 분리하면 전체 랭킹을 합산할 때도 각 ZSet에서 top K를 꺼내 merge sort하는 방식으로 처리할 수 있습니다.
+
+**꼬리 질문 예시**:
+- ZADD 시간복잡도가 O(1)이 아닌 O(log N)인 이유는? (skiplist 삽입 시 정렬 위치 탐색 필요)
+- 랭킹 데이터를 해시 기반 라운드로빈으로 샤딩하면 안 되는 이유는? (전체 상위 K 집계 시 모든 샤드 merge 필요)
+- ZSet의 score가 동일할 때 정렬 기준은? (사전순 lexicographic)
+
+**면접 세션 피드백 (2026-04-13 1회차)**:
+- Set/List/ZSet 비교 표현 좋음: "중복 허용하지 않으면서 정렬이 필요할 때"
+- ZADD를 O(1)로 잘못 답변 → O(log N) 교정 필요
+- 샤딩 방법: 라운드로빈 ❌ → 시간/도메인 기반 키 분리 + ZREMRANGEBYSCORE ✅
+
+---
+
 ## Redis 기본 자료구조 5가지를 각각 언제 사용하나요?
 
 **난이도**: 기초

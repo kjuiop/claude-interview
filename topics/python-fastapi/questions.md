@@ -18,9 +18,8 @@ related: [golang]
 **핵심 키워드:** 이벤트 루프, blocking, coroutine, ThreadPoolExecutor
 
 **모범 답변 방향:**
-- `def`: 동기 함수, FastAPI가 ThreadPoolExecutor에서 실행하여 이벤트 루프 블로킹 방지
-- `async def`: 코루틴, 이벤트 루프에서 직접 실행, `await`로 I/O 대기 중 제어권 반환
-- DB 쿼리·HTTP 호출 등 I/O가 있으면 `async def` + 비동기 드라이버 사용
+
+FastAPI에서 `def`와 `async def`의 차이는 실행 방식과 이벤트 루프 차단 여부에 있습니다. `async def`로 선언한 엔드포인트는 코루틴으로, FastAPI가 이벤트 루프에서 직접 실행하며 `await` 지점에서 I/O 대기 중에 이벤트 루프에 제어권을 반환해 다른 요청을 처리할 수 있습니다. 반면 일반 `def`로 선언한 함수는 동기 함수인데, 이를 이벤트 루프에서 직접 실행하면 함수가 완료될 때까지 이벤트 루프 전체가 블로킹됩니다. FastAPI는 이를 방지하기 위해 일반 `def` 엔드포인트를 자동으로 `ThreadPoolExecutor`에서 실행합니다. 실무 선택 기준으로는 DB 쿼리, HTTP 호출처럼 I/O 대기가 있는 작업에는 `async def`와 비동기 드라이버(asyncpg, motor, httpx)를 함께 사용해야 성능 이점을 얻을 수 있습니다. 주의할 점은 `async def` 안에서 동기 함수를 직접 호출하면 이벤트 루프가 블로킹되므로, 반드시 `asyncio.run_in_executor`로 별도 스레드에서 실행해야 합니다.
 
 **꼬리 질문 예시:**
 - `async def` 안에서 동기 함수를 직접 호출하면 어떻게 되나요? (이벤트 루프 블로킹)
@@ -37,9 +36,8 @@ related: [golang]
 **핵심 키워드:** 싱글 스레드 이벤트 루프, GMP 모델, M:N 스케줄링, CPU-bound vs I/O-bound
 
 **모범 답변 방향:**
-- asyncio: 싱글 스레드 이벤트 루프 (Node.js와 동일 원리), I/O-bound에 최적, CPU-bound는 ProcessPoolExecutor 필요
-- goroutine: GMP 모델 M:N 스케줄링, CPU-bound·I/O-bound 모두 효율적, 초기 스택 2KB
-- 선택 기준: 워크로드 특성(I/O vs CPU) + 팀 역량
+
+Python asyncio와 Go goroutine은 동시성 처리 방식이 근본적으로 다릅니다. asyncio는 싱글 스레드 이벤트 루프 기반으로 Node.js와 동일한 원리입니다. 코루틴이 `await` 지점에서 이벤트 루프에 제어권을 반환하고, 이벤트 루프가 다음 코루틴을 실행하는 협력적 멀티태스킹 방식입니다. 싱글 스레드이기 때문에 공유 자원의 race condition이 발생하지 않는 장점이 있지만, CPU-bound 작업이 이벤트 루프를 독점하면 전체가 블로킹되어 `ProcessPoolExecutor`로 별도 프로세스에서 실행해야 합니다. Go goroutine은 GMP 모델로 M개의 goroutine을 N개의 OS 스레드에 매핑하는 M:N 스케줄링을 사용합니다. P(Processor)가 G(Goroutine)를 M(OS Thread)에 스케줄링하며 선점적으로 동작합니다. goroutine의 초기 스택은 2KB로 매우 경량이라 수십만 개를 동시에 실행해도 메모리 부담이 적습니다. CPU-bound와 I/O-bound 모두 효율적으로 처리할 수 있어 고트래픽 환경에서 강점을 보입니다. 기술 선택 기준으로는 I/O 중심 API 서버에 팀이 Python을 잘 안다면 FastAPI/asyncio, 고트래픽·CPU-bound 혼재·실시간 처리가 요구되면 Go goroutine이 적합합니다.
 
 **GMP 용어 순서 주의:**
 - G(Goroutine) : M(OS Thread) : P(Processor)
