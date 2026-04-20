@@ -57,6 +57,11 @@ CQRS는 Command와 Query의 책임을 분리하는 패턴으로, 분리 수준�
 - "Redis pub/sub 메시지 유실을 어떻게 처리하나요?" → 재연결 시 MongoDB fallback, 또는 Redis Streams
 - "Pod 교체 시 WebSocket은 어떻게 처리하나요?" → terminationGracePeriodSeconds + preStop hook
 - "10만 명을 단일 채팅방 vs 여러 채팅방으로 나눌 때 차이는?" → 단일 채팅방: 모든 서버가 동일 topic 구독, 브로드캐스트 부하 집중
+- "WebSocket을 여러 서버로 수평 확장할 때 LB 설정은?" → **sticky session 필수** (IP hash 또는 쿠키 기반). round-robin이면 연결 끊김.
+
+**면접 세션 피드백 (2026-04-20 2회차)**:
+- Redis vs Kafka 트레이드오프(속도 vs 내구성), last_sequence 복구 패턴, MongoDB 선택 이유(스키마 유연성) 모두 정확.
+- 보완: sticky session 미언급(WebSocket 장기 연결 특성상 round-robin LB 불가). Go 설명에서 "이벤트 루프 N개" 오표현(Go는 goroutine M:N 스케줄링, 이벤트 루프 모델 아님). 카테노이드 경험을 "안 됐다"로만 끝냄 → "수평 확장이 필요했다면 이렇게 했을 것" 방향으로 전환 훈련 필요.
 
 **모범 답변:**
 

@@ -1,6 +1,6 @@
 ---
 type: harness-entropy
-updated: 2026-04-14
+updated: 2026-04-20
 ---
 
 # 엔트로피 추적 (Entropy Management)
@@ -56,6 +56,11 @@ updated: 2026-04-14
 | 2026-04-01 | 1,2회차 | Kafka 두 실패 케이스(중복 vs 유실) 정반대 | 2회차에서 교정 완료 |
 | 2026-04-14 | 2회차 | Redis 장애 fallback 미언급 | redis/concepts.md Sentinel/Cluster, degraded mode 정리 필요 |
 | 2026-04-14 | 2회차 | ZooKeeper Watch 1회성 재등록 미언급 | zookeeper/questions.md에 재등록 패턴 보강 — 이미 기록됨 |
+| 2026-04-15 | 1~3회차(채널톡) | 경험→질문 연결 훈련 부족 — 5문 연속 "잘 모르겠습니다" | 대표 경험 4가지(MultiCDN/S3파이프라인/ZooKeeper/CMAF) STAR 암기 노트 system-design/concepts.md에 추가 필요 |
+| 2026-04-15 | 1~3회차(채널톡) | 비즈니스 임팩트 마무리 습관 없음 | "그래서 고객에게 어떤 가치?" 패턴을 모든 답변 마무리에 붙이는 연습 필요 |
+| 2026-04-20 | 3회차 | Istio VirtualService/DestinationRule Canary 패턴 완전 미지(0/10) | kubernetes/questions.md YAML 패턴 암기. subset+weight+headers 조건 코드 수준 |
+| 2026-04-20 | 3회차 | LLM Hallucination Temperature·CoT·Re-ranking 미언급 | ai-stt/questions.md Hallucination 섹션 추가 완료. 이력서(STT→RAG) 연결 훈련 필요 |
+| 2026-04-20 | 4회차 | goroutine leak close(ch) 패턴 미언급 — "특정값 보내 nil 변경"으로 오답 | golang/goroutine.md close(ch) vs nil channel 차이 패턴 추가 완료. 암기 필요 |
 
 ---
 

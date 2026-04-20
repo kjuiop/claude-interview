@@ -14,10 +14,7 @@ related: [aws/concepts, kafka/questions, rabbitmq/questions]
 **핵심 키워드**: EC2(VM), S3(Object Storage), RDS(Managed RDBMS), ElastiCache(Redis/Memcached), VPC, Public/Private Subnet, ALB, NAT Gateway, Security Group, ASG, Multi-AZ
 
 **모범 답변 방향**:
-- **EC2**: 하이퍼바이저 위에서 실행되는 **가상 머신(VM)**. "물리 서버"가 아님 — 면접에서 주의
-- **S3**: 객체 스토리지. 이미지/로그/영상 저장, 정적 웹사이트 호스팅, 데이터 레이크
-- **RDS**: 패치/백업/복제를 AWS가 관리하는 관계형 DB. MySQL, Aurora, PostgreSQL, Oracle 등 지원
-- **ElastiCache**: Redis 또는 Memcached 엔진의 관리형 캐시. 캐싱 외에 분산락/pub-sub/세션 스토어로도 활용
+AWS 주요 서비스는 역할이 명확하게 구분됩니다. EC2는 하이퍼바이저 위에서 실행되는 가상 머신(VM)입니다. 물리 서버가 아니라는 점이 면접에서 자주 구분되는 포인트입니다. S3는 객체 스토리지로 이미지, 로그, 영상 같은 비정형 데이터 저장에 쓰고 정적 웹사이트 호스팅이나 데이터 레이크로도 활용됩니다. RDS는 패치, 백업, Multi-AZ 복제를 AWS가 관리해주는 관계형 DB 서비스로 MySQL, Aurora, PostgreSQL 등을 지원합니다. ElastiCache는 Redis나 Memcached 엔진의 관리형 캐시 서비스인데, 단순 캐싱 외에도 분산락, pub/sub, 세션 스토어 용도로도 활용됩니다. 백엔드 배포 시 일반적인 아키텍처는 인터넷 → ALB(Public Subnet) → EC2(Private Subnet) → RDS/ElastiCache(Private Subnet) 구조이고, EC2에서 외부로 나가는 아웃바운드 트래픽은 NAT Gateway를 경유합니다. Security Group은 ALB에서 EC2로의 트래픽만 허용해서 DB는 외부에 직접 노출되지 않습니다.
 
 **일반적인 아키텍처 (트래픽 흐름)**:
 ```

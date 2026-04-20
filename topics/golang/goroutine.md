@@ -165,18 +165,37 @@ go func() {
 
 **방지:**
 ```go
-// Context로 취소 신호 전달
-func worker(ctx context.Context) {
+// 1. Context 취소 신호 + 채널 동시 대기 — 핵심 패턴
+func worker(ctx context.Context, ch <-chan Message) {
     for {
         select {
+        case msg := <-ch:
+            process(msg)
         case <-ctx.Done():
-            return
-        default:
-            doWork()
+            return  // context 취소 시 탈출
         }
     }
 }
+
+// 2. sender가 close(ch) 호출 → for range 자동 종료
+go func() {
+    defer close(ch)
+    for _, item := range items {
+        ch <- item
+    }
+}()
+
+// receiver goroutine: close되면 루프 자동 종료
+go func() {
+    for msg := range ch {  // ch 닫히면 for range 종료
+        process(msg)
+    }
+}()
 ```
+
+**⚠️ close(ch) vs nil 채널:**
+- `close(ch)`: sender가 "더 이상 데이터 없음"을 선언 → for range receiver 자동 종료
+- `nil 채널`: select에서 해당 case를 영구 비활성화 — 동적 비활성화 패턴에 사용
 
 **탐지:**
 ```go
@@ -226,7 +245,15 @@ func worker(ctx context.Context, ch <-chan Message) {
 }
 ```
 
-탐지 측면에서는 테스트 단계에서 `uber-go/goleak` 라이브러리를 활용해 `defer goleak.VerifyNone(t)` 를 붙이면, 테스트 종료 후에도 살아있는 goroutine이 있으면 자동으로 실패 처리됩니다. 운영 환경에서는 `runtime.NumGoroutine()` 을 Prometheus 메트릭으로 노출하고, Grafana 대시보드에서 goroutine 수가 선형적으로 증가하는 패턴이 보이면 leak을 의심합니다.
+탐지 측면에서는 테스트 단계에서 `uber-go/goleak` 라이브러리를 활용해 `defer goleak.VerifyNone(t)` 를 붙이면, 테스트 종료 후에도 살아있는 goroutine이 있으면 자동으로 실패 처리됩니다. 운영 환경에서는 `runtime.NumGoroutine()` 을 Prometheus 메트릭으로 노출하고, Grafana 대시보드에서 goroutine 수가 선형적으로 증가하는 패턴이 보이면 leak을 의심합니다. 이미 leak이 의심될 때는 `/debug/pprof/goroutine?debug=1` 엔드포인트로 모든 goroutine의 스택 트레이스를 덤프해서 어떤 코드에서 블로킹 중인지 확인합니다.
+
+**면접 세션 피드백 (2026-04-20 4회차)**:
+- 잘한 점: 원인 3가지(context 미전달·channel 블로킹·무한 루프) 정확. ctx.Done()·select+default·nil channel 패턴 언급.
+- 보완:
+  - **`close(ch)` 패턴 미언급**: for range receiver goroutine을 종료시키는 가장 관용적인 방법. `defer close(ch)` 후 sender 종료
+  - **select + ctx.Done() 조합 코드**: 채널 대기 시에도 ctx.Done()을 함께 select에 넣는 패턴 필수
+  - **pprof 구체화**: `/debug/pprof/goroutine?debug=1` 스택 트레이스 덤프 엔드포인트
+  - **이력서 연결**: 카테노이드 goroutine per connection 5,000 동시접속 → context 취소 전파 설계 경험 연결
 
 **꼬리 질문: goroutine leak을 테스트에서 검증하는 방법과, 운영 중 의심할 수 있는 징후는?**
 - 테스트: `uber-go/goleak` — `defer goleak.VerifyNone(t)` 로 테스트 종료 시 잔존 goroutine 감지

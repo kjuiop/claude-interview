@@ -137,9 +137,7 @@ jobs:
 **핵심 키워드**: 메타 린터, 정적 분석, 코드 품질, 자동화 코드 리뷰
 
 **모범 답변 방향**:
-- golangci-lint는 100개 이상의 linter를 하나의 도구로 묶어 병렬 실행하는 메타 린터
-- 개별 linter를 따로 실행하면 패키지를 n번 파싱하지만, golangci-lint는 AST를 공유해 한 번만 파싱 → 속도와 메모리 효율
-- CI에 연동해 PR마다 자동으로 코드 품질을 검증하는 "자동화된 코드 리뷰어" 역할
+golangci-lint는 100개 이상의 Go linter를 하나의 도구로 묶어서 병렬로 실행하는 메타 린터입니다. 사용하는 이유는 크게 두 가지입니다. 첫째, 개별 linter를 따로 실행하면 각각이 패키지를 별도로 파싱해서 n번의 AST 분석이 발생하지만, golangci-lint는 AST를 공유하고 결과를 캐시하기 때문에 한 번만 파싱해서 훨씬 빠릅니다. 둘째, CI에 연동해서 PR마다 자동으로 코드 품질을 검증하는 "자동화된 코드 리뷰어" 역할을 합니다. 사람이 코드 리뷰할 때 마다 놓칠 수 있는 에러 처리 누락, 보안 취약점, 성능 문제 등을 자동으로 잡아줍니다.
 
 **꼬리 질문 예시**:
 - golangci-lint가 빠른 이유는? (AST 공유 + 병렬 실행 + 빌드 캐시)
@@ -152,11 +150,7 @@ jobs:
 **핵심 키워드**: 점진적 도입, .golangci.yml, nolint, CI 연동, 팀 컨벤션
 
 **모범 답변 방향**:
-- 한 번에 모든 linter를 켜면 기존 코드 위반이 수천 개 → 팀 저항 심함. 점진적 도입이 현실적
-- 1단계: default linter(govet, errcheck, staticcheck 등)만 활성화 후 기존 위반 수정
-- 2단계: 팀이 적응하면 gosec, revive, bodyclose 등 추가
-- `//nolint:lintername // 이유 명시` — 무분별한 nolint는 기술 부채이므로 이유 주석 필수 정책
-- `--new-from-rev=HEAD~1`로 변경된 파일만 린팅해 PR 피드백 속도 향상
+golangci-lint를 기존 프로젝트에 처음 도입할 때 가장 큰 함정은 모든 linter를 한꺼번에 켜는 것입니다. 기존 코드 위반이 수천 개가 쏟아지면 팀 저항이 생겨서 결국 포기하게 됩니다. 점진적 도입이 현실적입니다. 1단계에서는 기본 linter(`govet`, `errcheck`, `staticcheck`)만 활성화하고 기존 위반을 수정합니다. 팀이 적응하면 2단계에서 보안 관련 `gosec`, 코드 스타일 `revive`, HTTP 응답 바디 닫힘 검사 `bodyclose` 같은 linter를 단계적으로 추가합니다. `//nolint:lintername // 이유 명시` 주석으로 특정 위반을 억제할 수 있는데, 이유 주석 없는 nolint는 기술 부채이므로 팀 정책으로 이유 명시를 필수화합니다. CI에서는 `--new-from-rev=HEAD~1` 옵션으로 변경된 파일만 린팅해서 PR 피드백 속도를 높입니다.
 
 ---
 
@@ -165,20 +159,14 @@ jobs:
 **핵심 키워드**: gosec, 보안 취약점, G104, SQL injection, TLS, nolint
 
 **모범 답변 방향**:
-- gosec은 보안 취약점을 정적으로 검출 (SQL injection, 하드코딩 크리덴셜, 약한 TLS 설정, 에러 무시 등)
-- G104(에러 무시) 규칙은 테스트 코드에서 자주 false positive 발생 → `exclude-rules`로 `_test.go`에서 제외
-- 실무: 외부 입력 경로(HTTP handler, DB 쿼리 등)에는 gosec을 반드시 통과시키고, 테스트/mock 코드에서만 제외하는 정책
+gosec은 Go 코드에서 보안 취약점을 정적으로 검출하는 linter입니다. SQL injection 위험이 있는 쿼리 문자열 조합, 하드코딩된 크리덴셜, 약한 TLS 설정, 에러가 무시된 경우 등을 찾아냅니다. 특히 G104 규칙(에러 무시)은 테스트 코드에서 false positive가 자주 발생합니다. `defer resp.Body.Close()` 같은 테스트 정리 코드에서 에러를 무시하는 게 일반적인 패턴인데, gosec이 이를 위반으로 잡습니다. 이런 경우 `.golangci.yml`의 `exclude-rules`에서 `_test.go` 파일에 대해 G104를 제외합니다. 실무 원칙은 외부 입력이 들어오는 경로인 HTTP handler, DB 쿼리, 파일 처리 코드에는 gosec을 반드시 통과시키고, 테스트나 mock 코드에서만 예외를 허용하는 것입니다.
 
 ---
 
 **Q. linter와 formatter의 차이는 무엇이고, Go에서는 각각 무엇을 사용하나요?**
 
 **모범 답변 방향**:
-- **formatter**: 코드 스타일 정규화 (들여쓰기, 공백, import 정렬). 버그를 잡지 않음
-  - Go: `gofmt` (공식), `goimports` (import 자동 추가/정렬 포함)
-- **linter**: 버그 패턴, 보안 취약점, 코드 품질 문제 검출
-  - Go: `go vet`, `staticcheck`, `golangci-lint`
-- golangci-lint v2부터 `golangci-lint fmt` 서브커맨드로 포맷팅까지 통합
+formatter와 linter는 목적이 다릅니다. formatter는 코드 스타일을 정규화하는 도구입니다. 들여쓰기, 공백, import 정렬 같은 형식을 통일하지만 버그는 잡지 않습니다. Go 공식 formatter는 `gofmt`이고, import를 자동으로 추가·정렬해주는 `goimports`도 많이 씁니다. linter는 버그 패턴, 보안 취약점, 코드 품질 문제를 검출합니다. 에러 처리 누락, null 역참조 위험, 사용하지 않는 변수 등을 찾습니다. Go에서는 `go vet`(기본 정적 분석), `staticcheck`(고급 정적 분석), `golangci-lint`(메타 린터)를 씁니다. golangci-lint v2부터는 `golangci-lint fmt` 서브커맨드로 포맷팅까지 통합해서 하나의 도구로 포맷팅과 린팅을 모두 처리할 수 있습니다.
 
 ---
 

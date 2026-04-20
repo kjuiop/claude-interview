@@ -128,6 +128,13 @@ related: [redis/concepts]
 - 잘한 점: Cache-Aside 개념, write-through/write-around 구분, 두 race condition 시나리오 정확. DB 먼저 이유와 재시도 대응 제시.
 - 보완: TTL을 "신선도 조정"으로만 설명 → "invalidation 실패 시 최후 안전망" 역할 추가 필요
 
+**면접 세션 피드백 (2026-04-16 3회차)**:
+- 잘한 점: 세 가지 패턴(Cache-Aside/Write-Through/Write-Behind) 동작 및 사용 시나리오 정확. Write-Behind 리스크(데이터 유실) 즉시 파악. Kafka append-only + 멱등 처리 + 배치 발행 완화 방안 실무적 제시.
+- 보완:
+  - Cache-Aside의 Cache Stampede 미언급 → TTL Jitter / 분산락 완화 방법 세트로 암기
+  - Write-Behind 완화: Redis AOF `appendfsync everysec` 옵션 추가 (Kafka 없는 환경 대안)
+  - Kafka 멱등 설정 구체화: `enable.idempotence=true` + `acks=all` 명시
+
 ---
 
 ## Redis Cache Hit/Miss 비율을 어떻게 관리하고, Cache Miss 시 발생하는 문제를 어떻게 대응하나요?

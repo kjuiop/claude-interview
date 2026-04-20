@@ -37,6 +37,11 @@ related: [mysql, postgresql]
   - Posting List: `(문서ID, 빈도, 위치)` 목록
   - RDBMS 비교: "LIKE '%케이스%'는 전체 행 순차 스캔 O(n), ES는 Term Dictionary 이진 탐색 O(log n)"
 
+**면접 세션 피드백 (2026-04-20 2회차)**:
+- 잘한 점: LIKE 검색 B-tree 미활용 이유(앞 와일드카드 → 풀스캔) 정확히 연결.
+- 보완: Analyzer 단계명 여전히 미언급(Character Filter / Tokenizer / Token Filter). Term Dictionary FST 구조 미언급. Posting List에 TF/position/offset 저장 사실 모름. 이력서 경험 연결 없음.
+- **반복 패턴**: 2회차 연속으로 Analyzer 단계명 미언급 — 반드시 암기 최우선
+
 ---
 
 ## Index / Shard / Replica 구조

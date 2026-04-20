@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-14
+updated: 2026-04-20
 ---
 
 # 현재 준비 상태 스냅샷
@@ -16,6 +16,8 @@ updated: 2026-04-14
 |---|---|---|---|
 | 화이트큐브 | 챌린저스 백엔드 | 2026-04-10 | 준비 중 |
 | 넵튠 | 솔루션개발실 백엔드 | 2026-04-10 | 신규 등록 |
+| 인포뱅크 | iXpert AI 프로덕트 엔지니어 | 2026-04-17 | 준비 중 |
+| 채널톡 | Enterprise Solution Engineer (AX팀) | 2026-04-17 | 준비 중 |
 
 ---
 
@@ -39,11 +41,12 @@ updated: 2026-04-14
 | mysql | ★★★★☆ | 2026-04-10 | 복합 인덱스 순서·커버링 인덱스 정확. 인덱스 무력화 원인 정밀화 필요 — 함수 적용 시 범위 조건 변환(`>= AND <`), LIKE 앞 와일드카드 |
 | redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
 | kafka | ★★★★☆ | 2026-04-12 | acks/idempotence 전체 흐름 파악. PID 재시작 주체 오류(브로커→Producer 교정). acks=1 트레이드오프 표현 보완 필요 |
+| rabbitmq | ★★★☆☆ | 2026-04-17 | Exchange 타입 정확. DLQ `x-dead-letter-exchange` 속성명 + `NACK+requeue=false` + `x-death` 헤더명 — 3회 연속 꼬리 질문 막힘. 코드 레벨 선언 암기 최우선 |
 | kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
-| kubernetes | ★★★☆☆ | 2026-04-12 | StatefulSet 전혀 모름 — Pod identity, PVC volumeClaimTemplates, Kafka/MySQL StatefulSet 이유 암기 필요 |
+| kubernetes | ★★★☆☆ | 2026-04-20 | StatefulSet 전혀 모름 — Pod identity, PVC volumeClaimTemplates, Kafka/MySQL StatefulSet 이유 암기 필요. Istio VirtualService/DestinationRule Canary 패턴 완전 미지 — YAML 암기 최우선 |
 | zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
 | distributed-systems | ★★★☆☆ | 2026-04-12 | 2PC 전혀 모름 — Phase 1/2 흐름, Blocking 원인, 3PC 차이 암기 필요. Saga 선택 이유 방향은 알고 있음 |
-| elasticsearch | ★★★☆☆ | 2026-04-02 | Term Dictionary/Posting List 구조 모름, Analyzer 파이프라인 순서 오류 교정 필요 |
+| elasticsearch | ★★★☆☆ | 2026-04-20 | Analyzer 3단계명(Character Filter/Tokenizer/Token Filter) 2회 연속 미언급 — 최우선 암기. Term Dictionary FST 구조, Posting List TF/position/offset 추가 암기 필요 |
 | postgresql | ★★★☆☆ | 2026-04-02 | Dead Tuple/VACUUM 전혀 몰랐음. XID Wraparound 신규 암기 최우선 |
 | java/spring | ★★★★★ | 2026-04-02 | AOP 3문제 복습 완료. 횡단 관심사·JoinPoint/Pointcut·self-invocation 모두 교정됨 |
 
@@ -51,13 +54,15 @@ updated: 2026-04-14
 
 ## 다음 우선순위
 
-1. `kafka` — exactly-once transactional API 전체 흐름 복습 (commitAsync 재시도 순서 교정 완료)
-2. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습
-3. `kotlin/concepts.md` — 내용 없음, 신규 작성 필요
-4. `kubernetes/Istio` — Ambient Mode(sidecar-less, Istio 1.24+) 심화 암기
-5. `networking` — Forward Secrecy(ECDHE ephemeral key pair 생성 원리) 완성
-6. `elasticsearch` — 공고 요구사항, 미정리
-7. `redis` — Redis 장애 fallback 패턴(Sentinel/Cluster, degraded mode) 추가 정리 필요
+1. `rabbitmq` — `x-dead-letter-exchange` 큐 선언 코드(`QueueBuilder.withArgument`), `NACK+requeue=false`, `x-death` 헤더명 암기 (3회 연속 막힘 — 최우선)
+2. `kubernetes/Istio` — VirtualService/DestinationRule Canary YAML 패턴 (subset+weight+headers 조건) — 완전 미지 영역 (0/10)
+3. `elasticsearch` — Analyzer 3단계(Character Filter → Tokenizer → Token Filter) 2회 연속 미언급. Term Dictionary FST·Posting List TF/position — 최우선 암기
+4. `ai-stt/Hallucination` — Temperature·Chain-of-Thought·Re-ranking 3가지 미언급. 이력서(STT→RAG) 연결 훈련 필요
+5. `mysql/oracle` — Oracle vs MySQL 4가지 차이 암기: 페이징(ROWNUM vs LIMIT), NULL(`''`=NULL vs 구분), 시퀀스 vs AUTO_INCREMENT, 기본 격리수준(READ COMMITTED vs REPEATABLE READ)
+6. `java/@Transactional` — NESTED JPA 미지원 이유, REQUIRES_NEW 2커넥션 트레이드오프, savepoint 표현 정확화
+7. `kafka` — exactly-once transactional API 전체 흐름 복습
+8. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습
+9. `distributed-systems` — 멱등키 구현 패턴(Idempotency-Key + Redis TTL) 코드 수준 암기
 
 ---
 
@@ -67,6 +72,8 @@ updated: 2026-04-14
 |---|---|---|
 | 화이트큐브 | 8 | 2026-04-12 세션(총 6회차) — Go Map/sync.Map/Hexagonal/Redis AOF 전부 교정 완료. K8s StatefulSet·2PC 신규 교정. GC Tricolor 색상 정의 여전히 불완전 — 내일 최우선 복습 |
 | 넵튠 | 5 | 2026-04-14 세션(2회차) — Go channel fan-out·nil channel 비활성화 완성. Kafka rebalancing 4조건(max.poll.interval.ms 교정). 광고 파이프라인 ZooKeeper Watch + Redis pub/sub 비교 강점. 공통 보완: 코드 직접 제시, Redis 장애 fallback 패턴 추가 필요 |
+| 인포뱅크 | 4 | 2026-04-17 세션(4회차) — Spring IoC/DI 1/10(@PostConstruct/@PreDestroy만 알고 IoC 역할·@Component vs @Bean·Singleton 스코프 완전 모름). 3회차: AI 배속 CER 7/10, Oracle vs MySQL 1/10(완전 모름), JPA fetch join+Pageable 7/10 |
+| 채널톡 | 4 | 2026-04-17 세션(2회차 채널톡 질문 포함) — Webhook CRM 설계 9/10(Kafka 멱등성 3종 세트 완벽). 다음: 대표 경험 4가지(MultiCDN/S3파이프라인/ZooKeeper/CMAF) 30초 즉답 암기, 126배 수치 선제 연결 훈련 |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---

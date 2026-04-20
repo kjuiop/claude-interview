@@ -9,6 +9,75 @@ related: [kafka, redis, zookeeper, kubernetes, mysql, postgresql, system-design]
 
 ---
 
+## WebSocket vs HTTP
+
+**난이도**: 기초
+
+**핵심 키워드**: full-duplex, HTTP Upgrade, 방화벽 투과성, STOMP, pub/sub, destination 라우팅, gorilla/websocket, Hub 패턴
+
+**모범 답변 방향**:
+HTTP와 WebSocket의 가장 큰 차이는 통신 방향과 연결 유지 여부입니다. HTTP는 클라이언트가 요청하면 서버가 응답하고 연결을 끊는 단방향 반이중 구조입니다. 반면 WebSocket은 한 번 연결되면 세션을 유지하면서 서버와 클라이언트가 동시에 메시지를 주고받을 수 있는 **full-duplex(전이중)** 통신을 지원합니다. 서버가 클라이언트의 요청 없이도 먼저 데이터를 push할 수 있기 때문에 실시간 채팅에 적합합니다. 연결 방식은 HTTP 1.1 Upgrade 헤더를 통해 `ws://` 또는 `wss://` 프로토콜로 전환하며, 기존 HTTP 포트(80/443)를 그대로 사용해 방화벽 설정 변경 없이 적용 가능합니다.
+
+STOMP는 WebSocket 위에 pub/sub 메시징 패턴을 추가하는 상위 프로토콜입니다. WebSocket 자체는 raw 바이트 스트림만 전달하기 때문에 "누가 어떤 채널을 구독하는지" 개념이 없습니다. STOMP는 `/topic/room1` 같은 destination 기반 라우팅, SUBSCRIBE/SEND 프레임 구조, Spring 메시지 브로커 연동을 제공해서 멀티 채팅방 라우팅을 간결하게 구현할 수 있게 합니다.
+
+카테노이드에서는 STOMP 없이 gorilla/websocket으로 직접 구현했습니다. Hub 구조로 연결된 클라이언트를 중앙에서 관리하고 broadcast하는 방식으로 구현했고, Polling 방식 대비 채팅 레이턴시를 126배 개선한 경험이 있습니다.
+
+**꼬리 질문 예시**:
+- "WebSocket을 Long Polling 대신 선택하는 이유는?" → Long Polling은 서버가 응답할 때마다 연결을 맺고 끊어 오버헤드 큼. WebSocket은 한 번 연결 후 지속 유지 → 레이턴시 낮음
+- "STOMP를 사용하지 않으면 멀티 채팅방은 어떻게 구현하나요?" → 서버에서 room_id 기반 Map으로 클라이언트 그룹핑하거나 Hub 패턴으로 직접 라우팅
+- "wss://와 ws://의 차이는?" → wss는 TLS 암호화 적용, 프로덕션에서는 wss 필수
+
+**면접 세션 피드백 (2026-04-16 4회차)**:
+- 잘한 점: HTTP 1.1 Upgrade 메커니즘 정확. gorilla/websocket 실무 경험. 방화벽 투과성 장점 먼저 언급.
+- 보완: full-duplex 키워드 미언급 (서버 push 능력이 선택 핵심 이유). STOMP 기능 전혀 모름 → pub/sub + destination 라우팅 구조 암기 필요. 카테노이드 126배 레이턴시 개선 수치 연결 안 됨.
+
+---
+
+## 멱등성 (Idempotency)
+
+### Q. REST API 설계에서 멱등성이란 무엇이고, HTTP 메서드별로 어떻게 다른가요? 왜 중요한가요?
+
+**난이도**: 기초
+
+**핵심 키워드**: 멱등성, HTTP 스펙, GET/PUT/DELETE(멱등), POST/PATCH(비멱등), Idempotency-Key, Redis TTL, 네트워크 재시도
+
+**HTTP 메서드별 멱등 여부 (스펙 기준)**:
+
+| 메서드 | 멱등 여부 | 이유 |
+|---|---|---|
+| GET | O | 서버 상태 변경 없음 |
+| PUT | O | 전체 교체, N번 호출해도 마지막 상태로 수렴 |
+| DELETE | O | 삭제 후 재요청 시 404지만 "없는 상태"는 동일 |
+| POST | X | 동일 요청 N번 → N개 리소스 생성 |
+| PATCH | X | 상대값 업데이트(`delta: +1`)면 호출마다 결과 다름 |
+
+**멱등키(Idempotency Key) 패턴**:
+```
+클라이언트: Idempotency-Key: {uuid} 헤더 포함
+서버: Redis에 {key: result} TTL과 함께 저장
+재요청: 동일 키 → 저장된 결과 반환, 실제 로직 미실행
+```
+→ Stripe API가 이 패턴을 정확히 사용
+
+**왜 중요한가**:
+- 네트워크 타임아웃 → 클라이언트는 실패로 판단 → 재시도
+- 실제로는 첫 요청이 느리게 처리 중 → 두 요청 모두 처리 → 중복 결제/데이터
+- 분산 시스템에서 중복 요청은 언제든 발생 가능, 100% 방지 불가
+
+**모범 답변 방향**:
+> 멱등성이란 동일한 요청을 여러 번 반복해도 서버의 상태와 결과가 항상 동일한 것을 의미합니다. (중략) 이를 해결하는 대표적인 방법이 멱등키 패턴입니다. 클라이언트가 요청 시 `Idempotency-Key: uuid` 헤더를 함께 보내면, 서버는 Redis에 해당 키와 처리 결과를 TTL과 함께 저장합니다. 같은 키로 재요청이 들어오면 실제 로직을 실행하지 않고 캐시된 결과를 바로 반환합니다.
+
+**꼬리 질문 예시**:
+- "PATCH가 비멱등인 케이스를 예시로 보여주세요" → `{ "delta": +1 }` 상대값 업데이트는 호출마다 결과 다름
+- "멱등키를 Redis에 저장할 때 TTL은 어떻게 설정하나요?" → 재시도 유효 시간(보통 24시간~7일) 기준
+- "POST를 멱등하게 만들려면 어떻게 하나요?" → 클라이언트가 unique key 생성 후 멱등키 헤더로 전달, 서버에서 중복 체크
+
+**면접 세션 피드백 (2026-04-20 2회차)**:
+- DELETE 멱등성 설명 정확("404여도 상태 동일"). 재시도 시나리오 "출입문" 비유 명확.
+- 보완: POST 비멱등인 이유를 "스펙 기준"으로 설명 안 함. PATCH 비멱등 미명시. 멱등키 Redis 저장 패턴 구체성 부족. 이력서 경험 연결 없음.
+
+---
+
 ## 2PC (Two-Phase Commit)
 
 ### Q. 2PC 동작 원리와 Blocking 문제, 실무에서 Saga 패턴을 선택하는 기준을 설명해주세요.
@@ -298,10 +367,7 @@ Dockerfile에서 `CMD`/`ENTRYPOINT`는 반드시 Exec form(`["app"]`)을 사용�
 **핵심 키워드**: 제어권 반환, 결과 확인 주체, I/O 대기, Callback, Future/Promise
 
 **모범 답변 방향**:
-
-**핵심 구분 기준**:
-- **Blocking/Non-Blocking**: 호출된 함수가 **제어권을 즉시 반환하는가** — 호출자가 대기하느냐의 문제
-- **동기/비동기**: 결과를 **누가 확인하는가** — 호출자가 직접 기다리느냐(동기) vs 완료 알림을 받느냐(비동기)
+Blocking/Non-Blocking과 동기/비동기는 구분 기준이 다릅니다. Blocking/Non-Blocking은 호출된 함수가 제어권을 즉시 반환하는가의 문제입니다. Blocking은 호출자가 결과를 받을 때까지 아무것도 할 수 없고, Non-Blocking은 제어권을 즉시 돌려받아 다른 작업을 할 수 있습니다. 동기/비동기는 결과를 누가 확인하는가의 문제입니다. 동기는 호출자가 직접 결과를 기다리고, 비동기는 호출자가 기다리지 않고 완료 알림(Callback, Event)을 받습니다.
 
 **4가지 조합**:
 
@@ -313,9 +379,7 @@ Dockerfile에서 `CMD`/`ENTRYPOINT`는 반드시 Exec form(`["app"]`)을 사용�
 | **비동기 + Non-Blocking** | 제어권 즉시 반환, 결과는 콜백/이벤트로 알림 | Netty, WebFlux, Node.js, Kafka Consumer |
 
 **실무 핵심**:
-- **Spring MVC**: 동기 + Blocking — 스레드 하나당 요청 하나 처리. 스레드 고갈 위험
-- **Spring WebFlux**: 비동기 + Non-Blocking — 적은 스레드로 대량 요청 처리 (Netty 기반)
-- **Node.js**: 비동기 + Non-Blocking — 싱글 스레드 + Event Loop
+실무에서 Spring MVC는 동기 + Blocking 모델로 스레드 하나가 요청 하나를 전담합니다. 요청이 몰리면 스레드 고갈 위험이 있습니다. Spring WebFlux는 비동기 + Non-Blocking으로 Netty 기반에서 적은 스레드로 대량 요청을 처리합니다. Node.js도 비동기 + Non-Blocking이지만 싱글 스레드 + Event Loop 방식입니다.
 
 **꼬리 질문 예시**:
 - 동기 + Non-Blocking 조합이 실용적이지 않은 이유는 무엇인가요?
@@ -368,6 +432,16 @@ MSA에서 A → B → C로 이어지는 서비스 호출 체인에서 C가 느�
 - Circuit Breaker와 Retry를 함께 쓸 때 순서는 어떻게 해야 하나요?
 - Half-Open에서 테스트 요청이 실패하면 즉시 Open으로 돌아가야 하나요?
 - Circuit Breaker 상태를 여러 인스턴스 간에 공유하려면 어떻게 하나요?
+
+**MultiCDN 장애 대응 — Circuit Breaker 실무 적용 패턴** (2026-04-17 세션):
+- CDN 장애 시 Circuit Breaker 흐름: Closed(정상) → Open(fallback CDN으로 전환) → Half-Open(원래 CDN 복구 확인) → Closed
+- **수동 전환 이유**: CDN/네트워크 품질은 사용자마다 달라 자동 전환이 전체 시청자에게 재접속 충격을 줄 수 있음 → 라이브커머스에서 이 자체가 장애
+- **장애 감지**: CloudWatch에서 CDN별 4xx/5xx 에러율·응답 지연 수집 → Grafana 대시보드로 전체 추이 시각화 → 특정 시청자 문제 vs 전체 추이 상승 구분
+- **전환 구현**: 플레이어가 방송 진입 시 primary + fallback CDN URL 모두 보유 → 관리자 콘솔에서 전환 버튼 클릭 → 서버가 WebSocket으로 해당 방송 전체 시청자에게 reload 커맨드 broadcast → 플레이어 fallback CDN으로 재접속
+
+**면접 세션 피드백 (2026-04-17 1회차)**:
+- 잘한 점: 상태 전환 흐름과 수동 판단 이유를 비즈니스 맥락으로 정확히 설명. CloudWatch+Grafana 모니터링 흐름 선제 언급. WebSocket broadcast reload 구현 방식 정확.
+- 보완: **표준 상태명** — "off/half-on/on" 대신 **Closed/Open/Half-Open** 사용 필수. 결과 마무리 문장 없음.
 
 > 출처: https://hudi.blog/circuit-breaker-pattern/
 > 출처: https://seongwon.dev/MSA/20230426-서킷브레이커란/

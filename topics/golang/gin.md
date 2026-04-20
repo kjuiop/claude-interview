@@ -309,19 +309,28 @@ Go의 인터페이스는 **암시적 구현**이다. `*gin.Context`가 `context.
 
 ## 면접 질문
 
-### Q1. Gin의 미들웨어 실행 흐름을 Request부터 Response까지 설명해주세요.
+### Q1. Gin의 미들웨어 실행 흐름을 Request부터 Response까지 설명해주세요. c.Next()와 c.Abort()의 차이는?
 
 **난이도**: 중급
 
-**핵심 키워드**: HandlersChain, index, c.Next(), 양파 모델
+**핵심 키워드**: HandlersChain, index, c.Next(), c.Abort(), abortIndex=63, 양파 모델
 
 **모범 답변**:
 
-Gin의 미들웨어 실행 흐름은 HandlersChain이라는 슬라이스를 중심으로 동작합니다. HTTP 요청이 들어오면 `gin.Engine.ServeHTTP`가 httprouter 기반으로 라우터를 매칭하고, 해당 경로에 등록된 전역 미들웨어 + 그룹 미들웨어 + 라우트 핸들러를 하나의 HandlersChain 슬라이스로 결합합니다. 실행은 `c.index`라는 int8 값을 증가시키면서 슬라이스를 순서대로 호출하는 방식입니다. 각 미들웨어에서 `c.Next()`를 호출하면 index가 증가하며 다음 핸들러가 실행됩니다. `c.Next()` 이전 코드가 전처리, `c.Next()` 이후 코드가 후처리로 동작하기 때문에 미들웨어가 요청 전과 응답 후 모두에 개입하는 양파 모델이 완성됩니다. 체인이 모두 소진되면 ResponseWriter가 flush되어 클라이언트에 응답이 반환됩니다.
+Gin의 미들웨어 실행 흐름은 HandlersChain이라는 슬라이스를 중심으로 동작합니다. HTTP 요청이 들어오면 `gin.Engine.ServeHTTP`가 httprouter 기반으로 라우터를 매칭하고, 해당 경로에 등록된 전역 미들웨어 + 그룹 미들웨어 + 라우트 핸들러를 하나의 HandlersChain 슬라이스로 결합합니다. 실행은 `c.index`라는 int8 값을 증가시키면서 슬라이스를 순서대로 호출하는 방식입니다. 각 미들웨어에서 `c.Next()`를 호출하면 index가 증가하며 다음 핸들러가 실행됩니다. `c.Next()` 이전 코드가 전처리, `c.Next()` 이후 코드가 후처리로 동작하기 때문에 미들웨어가 요청 전과 응답 후 모두에 개입하는 양파 모델(미들웨어 A pre → 미들웨어 B pre → 핸들러 → 미들웨어 B post → 미들웨어 A post)이 완성됩니다. `c.Abort()`는 return이 아니라 c.index를 abortIndex(math.MaxInt8/2 = 63)로 설정해 이후 핸들러가 실행되지 않도록 막습니다. c.Abort() 이후 현재 미들웨어의 남은 코드는 계속 실행되므로 응답 후 return을 명시해야 합니다.
 
 **꼬리 질문**:
 - `c.Next()`를 호출하지 않으면 어떻게 되나요?
 - `c.Abort()`와 `return`의 차이는 무엇인가요?
+- c.Next() 전/후 코드의 실행 시점 차이와 실무 패턴은?
+
+**면접 세션 피드백 (2026-04-20 3회차)**:
+- 잘한 점: c.Abort() = index를 끝으로 이동(return이 아님) 핵심 정확. c.Next() pre/post 패턴 + 레이턴시 로깅 미들웨어 예시 구체적.
+- 보완:
+  - **HandlersChain 구조 명시** 미흡: `type HandlersChain []HandlerFunc` + `index int8`
+  - **abortIndex 수치**: math.MaxInt8/2 = 63
+  - **양파 구조 표현**: A pre → B pre → Handler → B post → A post 순서 명시
+  - **이력서 연결**: 카테노이드/샵라이브 Gin 미들웨어 인증/로깅 경험 연결
 
 ---
 
@@ -381,6 +390,12 @@ Gin의 미들웨어 실행 흐름은 HandlersChain이라는 슬라이스를 중�
 - `c.Request.Context()`와 `context.Background()`의 차이는 무엇인가요?
 - Service 레이어에 `*gin.Context`를 넘기면 왜 테스트가 어려워지나요?
 - gin.Context의 `c.Set`/`c.Get`으로 저장한 값은 `c.Request.Context().Value()`로 꺼낼 수 있나요?
+
+**면접 세션 피드백 (2026-04-20 1회차)**:
+- 잘한 점: 컨텍스트 취소 전파 문제 핵심 정확. 꼬리 질문에서 Gin 의존성→모킹 불가→테스트 불가 흐름 논리적 연결. 메시지 발행·배치 케이스로 구체화.
+- 보완:
+  - **c.Request.Context() vs context.Background() 선택 기준**: 취소 전파 원하면 c.Request.Context(), 완료 보장 필요한 작업은 context.WithTimeout(context.Background(), ...)
+  - **Gin 컨텍스트 풀링 이슈**: 핸들러 종료 후 *gin.Context가 pool에 반납·재사용 → 비동기 goroutine에 그대로 넘기면 초기화된 컨텍스트에 접근하는 문제
 
 > 출처: https://github.com/gin-gonic/gin/issues/1734
 

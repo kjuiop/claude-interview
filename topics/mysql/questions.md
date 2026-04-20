@@ -122,6 +122,13 @@ EXPLAIN은 쿼리가 실제로 어떻게 실행되는지를 옵티마이저 관�
 - `const` = 커버링 인덱스로 오해 → const는 type 컬럼, 커버링 인덱스는 Extra의 `Using index`
 - `ref` / `eq_ref` 구분 미숙지: ref=비고유 인덱스(여러 행), eq_ref=PK/UNIQUE(1행, JOIN에서)
 
+**면접 세션 피드백 (2026-04-20 1회차 — Using Index/filesort/temporary)**:
+- 잘한 점: Using Index(커버링 인덱스·랜덤 I/O 절감) 정확. Using filesort(정렬 방향 맞춘 인덱스 추가) 최적화 방향 즉시 제시.
+- 보완:
+  - **Using temporary 발생 패턴 추가**: GROUP BY 외 DISTINCT, UNION, ORDER BY+GROUP BY 컬럼이 다른 경우
+  - **Using temporary 최적화**: GROUP BY 컬럼 인덱스 추가(스트리밍 집계) / SELECT * → 필요 컬럼만(임시 테이블 크기 절감) / UNION → UNION ALL(중복 제거 단계 생략)
+  - **이력서 연결 누락**: DB 마이그레이션(다운타임 3분→2초) 경험에서 EXPLAIN 분석으로 filesort 개선 케이스 연결 필요
+
 **면접 세션 피드백 (2026-04-07 4회차 — slow query 디버깅 워크플로우)**:
 - 잘한 점: slow query log 전체 패턴 파악 후 접근 (시니어급 사고). "100ms→3s 급변 = 쿼리 변경 실수" 가설 제시 — 실무 디버깅 경험 증거. ALL/index 위험 인식 정확.
 - 보완:

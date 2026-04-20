@@ -321,9 +321,7 @@ type UserRepository interface { ... }  // DB 교체 가능 → 인터페이스 O
 **핵심 키워드**: 관심사 분리, 의존성 역전, 테스트 용이성, 유지보수
 
 **모범 답변 방향**:
-- 비즈니스 로직(UseCase)을 DB·HTTP 프레임워크와 분리 → 각각 독립적 변경 가능
-- Repository 인터페이스 덕분에 테스트 시 Mock으로 교체 가능 → DB 없는 단위 테스트
-- 팀 규모가 크고 도메인 복잡도가 높을 때 적합. 소규모·단순 프로젝트엔 오버엔지니어링
+Clean Architecture를 사용하는 핵심 이유는 비즈니스 로직을 DB나 HTTP 프레임워크 같은 외부 기술에서 분리하기 위해서입니다. 분리되면 DB를 MySQL에서 PostgreSQL로 바꾸거나, HTTP 프레임워크를 교체해도 비즈니스 로직은 변경할 필요가 없습니다. 또한 Repository 인터페이스가 있기 때문에 테스트 시 실제 DB 대신 Mock 구현체를 주입할 수 있어서 DB 없이도 단위 테스트를 빠르게 실행할 수 있습니다. 적합한 상황은 팀 규모가 크고 비즈니스 도메인이 복잡해서 여러 사람이 독립적으로 작업해야 하는 경우입니다. 반대로 소규모 서비스나 단순한 CRUD 기능 위주라면 레이어 분리와 Mapping 코드가 오히려 개발 속도를 늦추는 오버엔지니어링이 될 수 있습니다.
 
 **꼬리 질문**:
 - Repository 인터페이스는 어느 레이어에 위치해야 하나요? (Domain 레이어 — 구현은 Infrastructure)
@@ -338,10 +336,7 @@ type UserRepository interface { ... }  // DB 교체 가능 → 인터페이스 O
 **핵심 키워드**: 모델 분리, 비즈니스 규칙, ORM 오염, 변경 격리
 
 **모범 답변 방향**:
-- DB 모델: 저장 최적화 목적 (컬럼명, 인덱스, 관계)
-- 도메인 엔티티: 비즈니스 규칙과 검증 로직 포함
-- 분리 시 DB 스키마 변경이 비즈니스 로직에 영향 없음
-- ORM 어노테이션·태그가 도메인 엔티티를 오염시키지 않음
+도메인 모델과 DB 모델을 분리하는 이유는 두 모델의 목적이 다르기 때문입니다. DB 모델은 저장 최적화에 초점을 두어 컬럼명, 인덱스 힌트, 외래키 관계를 표현합니다. 도메인 엔티티는 비즈니스 규칙과 검증 로직을 포함하며, 메서드를 통해 상태 변경을 제어합니다. 분리하면 DB 스키마가 바뀌어도 비즈니스 로직에 영향을 주지 않습니다. 예를 들어 User 테이블에 컬럼이 추가되거나 정규화가 바뀌어도 도메인의 User 엔티티는 그대로 유지됩니다. 또한 ORM을 사용할 때 GORM의 태그나 JPA 어노테이션이 도메인 엔티티에 붙지 않아서 도메인 코드가 ORM 프레임워크에 오염되지 않습니다. 트레이드오프는 두 모델 간 변환 코드(Mapping)가 늘어난다는 점인데, Helper 함수로 처리하거나 소규모 서비스라면 통합을 고려해야 합니다.
 
 **꼬리 질문**:
 - 두 모델 간 변환(Mapping) 비용이 크면 어떻게 하나요? (Helper 함수, 소규모에선 통합 고려)
@@ -355,10 +350,7 @@ type UserRepository interface { ... }  // DB 교체 가능 → 인터페이스 O
 **핵심 키워드**: 생성자 함수, 인터페이스, 느슨한 결합, Mock
 
 **모범 답변 방향**:
-- Go 관례: `NewXXX(dep Interface) *XXX` 생성자 함수로 의존성 주입
-- 외부 DI 프레임워크(Wire, fx) 없이 main.go에서 직접 조립도 가능
-- 인터페이스에 의존하므로 테스트 시 Mock 구현체 주입 → DB 없는 단위 테스트
-- main.go에서 Infrastructure → UseCase → Delivery 순서로 조립
+Go에서 의존성 주입은 생성자 함수 패턴으로 구현합니다. `func NewUserService(repo UserRepository, cache Cache) *UserService` 처럼 의존성을 인터페이스 타입으로 받아서 구조체에 저장하는 방식입니다. 인터페이스에 의존하기 때문에 테스트할 때는 실제 구현체 대신 Mock을 주입할 수 있어 DB 없이도 단위 테스트가 가능합니다. 조립 순서는 `main.go`에서 Infrastructure(Repository, Cache) → UseCase → Delivery(Handler) 순서로 진행합니다. 의존성이 단순할 때는 외부 DI 프레임워크 없이 직접 조립해도 충분합니다. 의존성 그래프가 복잡해지면 `google/wire`나 `uber/fx` 같은 도구를 도입해서 코드 생성이나 reflect 기반으로 자동 조립하는 방식을 고려합니다.
 
 **꼬리 질문**:
 - google/wire나 uber/fx 같은 DI 도구를 언제 도입하나요? (의존성 그래프 복잡해질 때)
@@ -372,9 +364,7 @@ type UserRepository interface { ... }  // DB 교체 가능 → 인터페이스 O
 **핵심 키워드**: 응집력, 가독성, 모듈화, 프로젝트 규모
 
 **모범 답변 방향**:
-- Feature-based: `internal/user/{entity, usecase, repository, handler}` — 기능별 응집력 높음, 새 팀원 파악 용이
-- Type-based: `internal/{entity, usecase, repository, handler}` — 타입별 정렬, 기능 추가 시 여러 폴더 수정
-- 2025 권장: Feature-based. 규모가 커질수록 Type-based는 파일 탐색 비용 급증
+Feature-based 구조는 `internal/user/{entity, usecase, repository, handler}` 처럼 기능(도메인) 단위로 파일을 묶는 방식입니다. 새 팀원이 "User 관련 코드는 어디 있나?"라는 질문에 바로 한 폴더를 찾아가면 된다는 장점이 있고, 기능을 추가하거나 삭제할 때도 한 폴더에서 작업이 끝납니다. Type-based 구조는 `internal/{entity, usecase, repository, handler}` 처럼 타입별로 묶는 방식입니다. 같은 타입(예: 모든 UseCase)을 한눈에 보기는 좋지만, 새 기능을 추가하면 여러 폴더를 동시에 수정해야 해서 규모가 커질수록 파일 탐색 비용이 급증합니다. 현재는 Feature-based를 권장하는 추세입니다. 단, 팀이 이미 Type-based에 익숙하고 프로젝트가 작다면 굳이 바꿀 필요는 없습니다.
 
 ---
 
@@ -385,11 +375,7 @@ type UserRepository interface { ... }  // DB 교체 가능 → 인터페이스 O
 **핵심 키워드**: 에러 변환, 비즈니스 에러, HTTP 상태코드, errors.Is
 
 **모범 답변 방향**:
-- Domain: `ErrNotFound`, `ErrEmailExists` 등 비즈니스 에러 정의
-- Repository: DB 에러(`sql.ErrNoRows`) → 도메인 에러로 변환
-- UseCase: `fmt.Errorf("context: %w", err)` 로 wrap, 로깅
-- Delivery: `errors.Is(err, domain.ErrNotFound)` → HTTP 404 매핑
-- 레이어 간 에러 타입이 漏출되면 레이어 경계가 무너진다
+Clean Architecture에서 에러는 레이어를 넘어갈 때 반드시 해당 레이어의 언어로 변환해야 합니다. Domain 레이어에서는 `ErrNotFound`, `ErrEmailExists` 같은 비즈니스 에러를 정의합니다. Repository 레이어에서는 DB 에러(예: `sql.ErrNoRows`)를 받아 Domain 에러로 변환합니다. `sql.ErrNoRows`를 그대로 UseCase로 올리면 UseCase가 DB 기술에 의존하게 되어 레이어 경계가 무너집니다. UseCase 레이어에서는 `fmt.Errorf("createUser: %w", err)` 형태로 컨텍스트를 추가해 wrap하고, 로깅이 필요하면 이 레이어에서 처리합니다. Delivery 레이어(HTTP Handler)에서는 `errors.Is(err, domain.ErrNotFound)`로 에러 종류를 판별해 HTTP 상태코드(404, 409 등)로 변환합니다. 에러 타입이 레이어 경계를 넘어 漏출되면, 예를 들어 `*pq.Error` 같은 DB 드라이버 에러가 Handler까지 올라오면, 레이어 분리가 사실상 무너진 것과 같습니다.
 
 참고: [[topics/golang/error-handling]]
 

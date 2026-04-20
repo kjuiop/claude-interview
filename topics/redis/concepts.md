@@ -1,6 +1,6 @@
 ---
 tags: [redis, cache, distributed-lock, backend]
-related: [distributed-systems, golang, kubernetes]
+related: [distributed-systems, golang, kubernetes, mysql, kafka]
 ---
 
 # Redis 핵심 개념

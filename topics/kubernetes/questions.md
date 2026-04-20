@@ -206,6 +206,46 @@ preStop:
 - 트래픽 비율을 바꿀 때 서비스 재시작 없이 적용이 되나요? (VirtualService 수정만으로 즉시 적용)
 - 서킷 브레이커는 어떤 리소스로 설정하나요? (DestinationRule의 outlierDetection)
 
+**핵심 YAML 패턴 암기:**
+```yaml
+# DestinationRule — subset 정의
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+spec:
+  host: my-svc
+  subsets:
+    - name: v1
+      labels: { version: stable }
+    - name: v2
+      labels: { version: canary }
+
+# VirtualService — 트래픽 비율 + 헤더 기반 라우팅
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+spec:
+  hosts: [my-svc]
+  http:
+    # 헤더 기반: 내부 QA 테스터만 canary
+    - match:
+        - headers:
+            x-canary:
+              exact: "true"
+      route:
+        - destination: { host: my-svc, subset: v2 }
+    # 가중치 기반: 일반 트래픽 90/10
+    - route:
+        - destination: { host: my-svc, subset: v1 }
+          weight: 90
+        - destination: { host: my-svc, subset: v2 }
+          weight: 10
+```
+
+**면접 세션 피드백 (2026-04-20 3회차)**:
+- 완전 미지 영역 (0/10) — 아래 내용 전체 암기 필요
+- 핵심 차이점: 순수 K8s = 레플리카 수로만 비율 조절 / Istio = weight 선언으로 Pod 수와 무관하게 1% 단위 조절
+- DestinationRule: subset 정의(label 기반) / VirtualService: weight + headers 조건
+- 헤더 기반 라우팅으로 내부 테스터만 canary 버전 접근 가능
+
 > 출처: https://gruuuuu.hololy.org/cloud/service-mesh-istio/
 
 ---

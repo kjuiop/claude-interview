@@ -16,13 +16,7 @@ related: [kafka, distributed-systems, aws]
 **핵심 키워드**: Direct/Fanout/Topic/Headers Exchange, routing key, wildcard, Ack, Kafka exactly-once, idempotent producer
 
 **모범 답변 방향**:
-- Exchange 타입은 "라우팅 방식" 기준으로 설명
-  - Direct = routing key 완전 일치
-  - Fanout = 모든 바인딩 큐에 브로드캐스트
-  - Topic = 와일드카드 패턴 매칭 (`*`, `#`)
-  - Headers = 헤더 속성 기반 라우팅
-- Kafka vs RabbitMQ: 재처리/exactly-once/수평확장 → Kafka, 복잡한 라우팅/Task Queue → RabbitMQ
-- 이력서 연결: 트랜스코더 오케스트레이션 → Direct Exchange로 인스턴스별 작업 분배 + Event-Driven 전환
+RabbitMQ의 Exchange는 Producer가 보낸 메시지를 어떤 Queue로 보낼지 결정하는 라우팅 규칙입니다. 타입은 네 가지가 있는데, Direct는 routing key가 완전히 일치하는 큐에만 전달하고, Fanout은 routing key를 무시하고 바인딩된 모든 큐에 브로드캐스트합니다. Topic은 `*`(단어 하나)와 `#`(0개 이상 단어) 와일드카드 패턴으로 매칭하는 방식이라 멀티테넌트나 서비스별 이벤트 필터링에 유연하게 활용됩니다. Headers는 routing key 대신 메시지 헤더 속성으로 라우팅하는데, 복잡한 필터 조건이 필요할 때 씁니다. Kafka와 비교하면, 메시지 재처리가 필요하거나 exactly-once가 중요한 경우, 대용량 수평확장이 필요한 경우에는 Kafka가 적합합니다. 반면 복잡한 라우팅 로직이나 Task Queue, 작업 완료 보장이 중요한 경우에는 RabbitMQ가 더 자연스럽습니다. 카테노이드에서 트랜스코더 오케스트레이션을 구현할 때 Direct Exchange로 인스턴스별 전용 큐를 바인딩해서 작업을 분배하고, Polling 방식에서 Event-Driven으로 전환해 불필요한 헬스체크 70회/분을 제거한 경험이 있습니다.
 
 **꼬리 질문 예시**:
 - "Topic Exchange와 Fanout Exchange의 차이는?" → Fanout은 모든 큐에 무조건 전송, Topic은 패턴 매칭된 큐에만 전송
@@ -45,6 +39,10 @@ related: [kafka, distributed-systems, aws]
 - 잘한 점: 4가지 Exchange 타입 정확히 구분. Topic 선택 이유(`ad.click`, `ad.#` 패턴 예시) 실용적. Kafka 비교에서 append-only 로그·파티션 수평확장·consumer group 독립 오프셋·재처리 키워드 모두 언급. 트랜스코딩/자막추출/암호화 실무 경험 연결 자연스럽고 설득력 있음.
 - 보완: manual ACK/NACK + DLQ 조합 추가 ("트랜스코딩 실패 시 NACK → DLQ → 재처리" 패턴). Kafka 재처리 구체화 ("오프셋 리셋 → 집계 버그 수정 후 재집계").
 
+**면접 세션 피드백 (2026-04-16 3회차)**:
+- 잘한 점: Direct/Fanout/Topic 동작과 사용 기준 정확. `*` vs `#` 와일드카드를 payment.*/payment.# 예시로 명확히 구분.
+- 보완: Fanout의 "라우팅 키를 완전히 무시한다"는 표현 명시 필요. 실무 경험(카테노이드 트랜스코더) 연결 없음. Direct vs Topic 선택 기준("라우팅 키 고정·단순 → Direct, 계층 구조·확장 가능성 → Topic") 추가 필요.
+
 ---
 
 ## RabbitMQ Dead Letter Exchange 활용 패턴
@@ -59,3 +57,30 @@ Dead Letter Exchange는 RabbitMQ에서 처리에 실패하거나 TTL이 만료�
 **꼬리 질문 예시**:
 - "DLX 없이 nack하면 어떻게 되나요?" → requeue=true면 큐 앞으로 돌아와 무한 재시도 루프 발생 위험
 - "Kafka의 DLQ와 비교하면?" → Kafka는 offset 재조정으로 재처리 가능, DLQ 패턴은 별도 topic으로 구현
+- "retry 횟수를 어떻게 추적하나요?" → RabbitMQ는 자체 추적 없음. `x-death` 헤더로 카운트하거나 Spring AMQP `RetryTemplate` + `RepublishMessageRecoverer` 사용
+
+**x-dead-letter-exchange 설정 예시** (2026-04-16 세션 보완):
+```java
+@Bean
+Queue workQueue() {
+    return QueueBuilder.durable("work.queue")
+        .withArgument("x-dead-letter-exchange", "dlx.exchange")
+        .withArgument("x-message-ttl", 30000)  // TTL 만료도 DLX로
+        .build();
+}
+```
+- NACK + `requeue=false` → 자동으로 `x-dead-letter-exchange`로 라우팅
+- Spring AMQP 재시도: `RetryTemplate`(횟수/백오프 설정) + `RepublishMessageRecoverer`(최종 실패 시 에러 큐로 발행)
+
+**면접 세션 피드백 (2026-04-16 1회차)**:
+- 잘한 점: NACK + 수동 ACK + 지수 백오프 + DLQ 알람 전체 흐름 올바르게 파악
+- 보완: `x-dead-letter-exchange` 큐 선언 방법 모름. retry count 추적 방법(`x-death` 헤더, RetryTemplate) 모름. 이 두 가지는 "설계했다"고 말하면 바로 나오는 꼬리 질문.
+
+**면접 세션 피드백 (2026-04-17 2회차)** ⚠️ 3회 연속 동일 포인트 막힘:
+- 잘한 점: DLX 별도 선언 방향 정확. 헤더로 재시도 횟수 추적한다는 개념 올바름. DLQ 임계치 초과 시 전환 흐름 이해.
+- 보완 (3회 연속 미해결):
+  - **`x-dead-letter-exchange` 속성명** — 큐 선언 arguments에 `"x-dead-letter-exchange": "dlx.name"` 설정이 없으면 NACK 메시지가 DLX로 라우팅되지 않음. 이 속성명을 반드시 암기할 것
+  - **NACK + `requeue=false` 조합** — `channel.basicNack(tag, false, false)` 또는 Spring AMQP `defaultRequeueRejected=false` + 예외 throw → 자동 DLX 라우팅
+  - **헤더명 교정** — "dead-letter-header" ❌ → `x-death` ✅ (RabbitMQ가 DLX 통과 시 자동 추가, `count` 필드로 횟수 확인)
+  - **Spring AMQP 선언 코드**: `QueueBuilder.durable("work.queue").withArgument("x-dead-letter-exchange", "dlx.exchange").build()` 코드 패턴 암기 필수
+- 점수: 4/10 — 꼬리 질문 "잘 모르겠습니다" (3회 연속)

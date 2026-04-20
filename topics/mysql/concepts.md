@@ -116,3 +116,21 @@ EXPLAIN SELECT * FROM orders WHERE user_id = 1 AND status = 'active';
 ## 참고 링크
 - [MySQL EXPLAIN 공식 문서](https://dev.mysql.com/doc/refman/8.0/en/explain-output.html)
 - [Use The Index, Luke](https://use-the-index-luke.com/)
+
+---
+
+## 7. Oracle vs MySQL 주요 차이
+
+> 인포뱅크 필수 스택 Oracle 대비용. 4가지 핵심 차이 암기.
+
+| 항목 | Oracle | MySQL |
+|---|---|---|
+| **페이징 문법** | `WHERE ROWNUM <= N` (레거시) / `FETCH FIRST N ROWS ONLY` (12c+) | `LIMIT N OFFSET M` |
+| **NULL 처리** | 빈 문자열 `''` = NULL 동일 취급 | `''`와 NULL 엄격히 구분 |
+| **자동 증가** | SEQUENCE 객체 별도 생성 + `seq.NEXTVAL` 명시 | `AUTO_INCREMENT` 컬럼 선언 |
+| **기본 격리 수준** | `READ COMMITTED` (Non-Repeatable Read 발생 가능) | `REPEATABLE READ` (스냅샷 유지) |
+
+**실무 주의 포인트:**
+- Oracle → MySQL 마이그레이션 시 `''` = NULL 차이로 데이터 조회 누락 발생 가능
+- JPA `@GeneratedValue(strategy = SEQUENCE)`는 Oracle의 SEQUENCE 객체를 활용
+- MySQL의 REPEATABLE READ는 MVCC 스냅샷 기반이라 Phantom Read도 대부분 방지됨

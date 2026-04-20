@@ -412,11 +412,7 @@ func TestCreateUser_EmailExists(t *testing.T) {
 **핵심 키워드**: Port(인터페이스), Primary/Secondary, Driving/Driven, 의존성 역전
 
 **모범 답변 방향**:
-- Port는 Core의 경계면 — 인터페이스로 표현되며 Core가 외부와 맺는 계약
-- Primary Port: 외부(HTTP, CLI)가 Core를 호출하는 창구. UseCase 인터페이스
-- Secondary Port: Core가 외부(DB, Cache)를 호출하는 창구. Repository 인터페이스
-- Adapter: Port를 실제 기술로 구현한 것 (Postgres Repo, HTTP Handler)
-- Core는 Port 인터페이스에만 의존 → Adapter 교체 시 Core 코드 변경 없음
+Hexagonal Architecture에서 Port는 Core의 경계면, 즉 Core가 외부와 맺는 계약입니다. Go에서는 인터페이스로 표현됩니다. Port는 방향에 따라 두 종류로 나뉩니다. Primary Port는 외부(HTTP Handler, CLI, gRPC Server)가 Core를 호출하는 창구로, UseCase 인터페이스가 여기에 해당합니다. Secondary Port는 반대로 Core가 외부 시스템(DB, Cache, Kafka)을 호출할 때 사용하는 창구로, Repository나 EventPublisher 인터페이스가 여기에 해당합니다. Adapter는 이 Port를 실제 기술로 구현한 것입니다. HTTP Handler가 Primary Adapter, Postgres Repository 구현체가 Secondary Adapter입니다. 핵심은 Core가 Port 인터페이스에만 의존하기 때문에, Adapter를 교체해도 Core 코드는 변경할 필요가 없다는 점입니다. 의존성 역전 원칙(DIP)에 의해 모든 의존성은 항상 Core를 향합니다. Adapter가 Core를 알지만, Core는 Adapter를 전혀 모릅니다.
 
 **꼬리 질문**:
 - Primary Adapter와 Secondary Adapter의 차이는? (방향 — 누가 누구를 호출하느냐)
@@ -446,10 +442,7 @@ func TestCreateUser_EmailExists(t *testing.T) {
 **핵심 키워드**: 암시적 구현, Duck typing, 결합도, Port 자동 충족
 
 **모범 답변 방향**:
-- Go는 `implements` 선언 없이 메서드 시그니처만 맞으면 인터페이스를 자동 구현
-- Hexagonal에서 Adapter는 Port(인터페이스)를 "그냥 구현"하면 됨 → 별도 등록 불필요
-- 서로 다른 패키지에 있어도 인터페이스만 맞으면 연결 — 결합도가 자연스럽게 낮아짐
-- Java처럼 `implements UserRepository`를 선언하면 Adapter가 Port 패키지를 import해야 하는 문제 발생
+Go의 암시적 인터페이스는 `implements` 선언 없이 메서드 시그니처만 일치하면 인터페이스를 자동으로 구현하는 Duck typing 방식입니다. 이게 Hexagonal Architecture와 잘 맞는 이유는, Hexagonal에서 Secondary Adapter(예: Postgres 구현체)가 Core에 정의된 Port(예: UserRepository 인터페이스)를 구현할 때 별도의 등록이나 선언이 필요 없기 때문입니다. 패키지가 달라도 메서드 시그니처만 맞으면 자동으로 Port를 충족합니다. Java에서는 `implements UserRepository`처럼 명시해야 해서 Adapter 패키지가 Port 패키지를 import해야 하는 순환 의존 위험이 생깁니다. Go에서는 이런 문제가 없어 Core와 Adapter 사이의 결합도가 자연스럽게 낮아집니다. 컴파일 타임에 인터페이스 충족 여부를 확인하고 싶을 때는 `var _ port.UserRepository = (*PostgresUserRepo)(nil)` 패턴을 사용합니다. 이 선언이 컴파일되면 PostgresUserRepo가 UserRepository를 완전히 구현했다는 보장이 됩니다.
 
 **꼬리 질문**:
 - 인터페이스 준수 여부를 컴파일 타임에 확인하고 싶다면? (`var _ port.UserRepository = (*PostgresUserRepo)(nil)`)
@@ -463,11 +456,7 @@ func TestCreateUser_EmailExists(t *testing.T) {
 **핵심 키워드**: 트레이드오프, 팀 친숙도, 프로토콜 다양성, 복잡도
 
 **모범 답변 방향**:
-- 정답 없음 — 팀 상황에 따라 다름
-- Hexagonal: 여러 프로토콜(HTTP + gRPC + CLI), Core 격리 테스트 중요, 장기 유지보수
-- Clean Architecture: 레이어 경계 명확히 하고 싶을 때, 팀이 이미 익숙할 때
-- 실무에서는 두 패턴을 혼용 — Clean의 레이어 이름 + Hexagonal의 Port/Adapter 개념
-- 소규모 서비스라면 둘 다 오버엔지니어링 — 단순한 레이어 분리로 충분
+두 패턴 중 정답은 없고 팀 상황에 따라 다릅니다. Hexagonal이 유리한 경우는 HTTP, gRPC, CLI처럼 여러 프로토콜을 동시에 지원해야 하거나, Core 격리 테스트가 중요한 경우, 또는 DB나 외부 서비스를 교체할 가능성이 있는 장기 유지보수 프로젝트입니다. Clean Architecture가 적합한 경우는 팀이 이미 Clean Architecture에 익숙해서 온보딩 비용이 낮거나, 레이어 경계를 명확히 나누는 방식이 팀 커뮤니케이션에 더 잘 맞을 때입니다. 실무에서는 두 패턴을 혼용하는 경우도 많습니다. Clean Architecture의 레이어 이름(Domain, UseCase, Repository)을 유지하면서 Hexagonal의 Port/Adapter 개념을 적용해 인터페이스를 명시적으로 구분하는 방식입니다. 반대로 소규모 서비스나 팀 5명 이하의 단순 CRUD 서비스라면 두 패턴 모두 오버엔지니어링이 될 수 있어서 2~3 레이어 단순 분리로 충분합니다.
 
 **꼬리 질문**:
 - 실제로 어떤 패턴을 써봤나요? (본인 경험 기반 답변)

@@ -124,6 +124,48 @@ Spring AOP가 동작하지 않는 대표적인 세 가지 케이스가 있습니
 
 ---
 
+## @Transactional Propagation — REQUIRED, NESTED, REQUIRES_NEW 비교
+
+**난이도:** 기초
+
+**핵심 키워드:** REQUIRED join, NESTED 세이브포인트, REQUIRES_NEW 커넥션 2개, JPA NESTED 미지원
+
+**REQUIRED (기본값)**:
+- 기존 트랜잭션이 있으면 참여(join), 없으면 새로 생성
+- serviceA() → serviceB() 호출 시 둘 다 REQUIRED면 **같은 트랜잭션**으로 묶임
+- serviceB()가 실패하면 serviceA() 전체가 함께 롤백
+
+**NESTED**:
+- 기존 트랜잭션 안에 **세이브포인트(savepoint)** 를 찍고 중첩 실행
+- 내부 실패 시 세이브포인트까지만 롤백, 외부 트랜잭션은 계속 진행
+- REQUIRES_NEW와 달리 **같은 DB 커넥션** 사용 (오버헤드 낮음)
+- **JPA 환경에서 미지원**: Hibernate가 세이브포인트를 공식 지원하지 않아 예외 발생 가능
+
+**REQUIRES_NEW**:
+- 기존 커넥션을 **일시 중단**하고 새 커넥션을 열어 완전히 독립된 트랜잭션 생성
+- 두 트랜잭션이 완전히 독립적으로 커밋/롤백
+- 실무 사례: **감사 로그** — 메인 로직 실패 → 롤백되어도 "누가 언제 시도했다"는 기록은 반드시 저장
+
+**커넥션 수 비교**:
+| propagation | 커넥션 수 | 특징 |
+|---|---|---|
+| REQUIRED | 1개 | join 또는 새 트랜잭션 시작 |
+| NESTED | 1개 | 세이브포인트 추가 (같은 커넥션) |
+| REQUIRES_NEW | 2개 | 기존 커넥션 중단 + 새 커넥션 |
+
+**꼬리 질문 예시:**
+- NESTED와 REQUIRES_NEW의 결정적 차이는? (커넥션 수, JPA 지원 여부)
+- JPA 환경에서 "내부 실패해도 외부 트랜잭션 계속 진행"을 구현하려면? → REQUIRES_NEW + try-catch
+
+**면접 세션 피드백 (2026-04-16 2회차 — NESTED 완전 모름)**:
+- 보완: REQUIRED join 동작, NESTED 세이브포인트, JPA 미지원 이유 모두 암기 필요
+
+**면접 세션 피드백 (2026-04-17 1회차)**:
+- 잘한 점: REQUIRED join 개념 정확. NESTED 세이브포인트 → 부분 롤백, 외부 트랜잭션 계속 진행 정확.
+- 보완: NESTED vs REQUIRES_NEW 커넥션 차이 미언급. JPA 미지원 이유 구체화 필요. 실무 경험(감사 로그 REQUIRES_NEW) 연결 없음.
+
+---
+
 ## JPA N+1
 
 **Q. JPA에서 N+1 문제가 무엇이고 어떻게 해결하나요?**
@@ -175,6 +217,17 @@ N+1 문제는 1번의 목록 조회 쿼리 이후 각 엔티티의 연관 데이
   - @EntityGraph 누락: Fetch Join과 동일 효과를 어노테이션으로 선언
   - 세 해결책 트레이드오프 비교: Fetch Join(쿼리 1, 페이징 불가) / ID 분리(쿼리 2, 페이징 가능) / BatchSize(IN 쿼리, 튜닝 필요)
 
+**면접 세션 피드백 (2026-04-16 1회차)**:
+- 잘한 점: Lazy Loading 원인 정확. fetch join → @EntityGraph → batch fetch 세 가지 모두 설명. batch fetch 내부 동작(ID 수집 → IN절 묶음 조회) 설명. @EntityGraph 선택 기준("단순하면 EntityGraph, 복잡하면 fetch join") 실무 관점 정확.
+- 보완: **batch fetch 선택 이유 핵심 미언급** — "페이징이 필요할 때 fetch join 대신 batch fetch"가 핵심 답. HHH90003004 경고 아직 즉시 암기 안 됨. 2회 이상 보완으로 나온 항목이므로 다음 세션 전 반드시 암기.
+
+**면접 세션 피드백 (2026-04-17 3회차)**:
+- 잘한 점: 행 수 불일치 원인(Post+Comment Join 행 수 뒤틀림)과 Hibernate 메모리 전체 로드 동작 정확. ID 먼저 조회 → IN 절 패턴 실용적. @BatchSize 동작 원리(N+1을 IN 절로 묶음) 올바르게 설명.
+- 보완:
+  - **OOM 위험 미언급**: "메모리 부담이 크다" → "수백만 건 시 OutOfMemoryError로 서버 다운 가능"으로 명시
+  - **HHH90003004 경고 여전히 미언급**: 3회차에도 나오지 않음 — 운영 리스크 키워드로 반드시 암기
+  - **실무 연결 없음**: Spring Boot 프로젝트 경험과 연결 필요
+
 ---
 
 ## @Transactional 을 직접 구현한다면 어떻게 해야 하나요?
@@ -198,10 +251,28 @@ N+1 문제는 1번의 목록 조회 쿼리 이후 각 엔티티의 연관 데이
 
 ---
 
+## Spring IoC/DI — @Component vs @Bean, Bean 스코프, 생명주기 콜백
+
+**난이도**: 기초
+
+**핵심 키워드**: IoC, DI, @Component, @Bean, @Configuration, Singleton, @PostConstruct, @PreDestroy
+
+**모범 답변 방향**:
+Spring IoC 컨테이너는 객체의 생성과 의존성 주입을 프레임워크가 담당하는 구조입니다. 개발자는 `new`로 직접 객체를 생성하지 않고 선언만 하면 컨테이너가 주입해줍니다. `@Component`는 내가 작성한 클래스에 붙여 컴포넌트 스캔 대상으로 등록합니다(`@Service`, `@Repository`, `@Controller`가 모두 내부적으로 `@Component`). `@Bean`은 `@Configuration` 클래스의 메서드에 붙여 외부 라이브러리 클래스나 복잡한 설정이 필요한 객체를 등록할 때 사용합니다(`DataSource`, `ObjectMapper` 등). Bean의 기본 스코프는 **Singleton** — 컨테이너당 인스턴스 하나, 모든 요청이 같은 객체 공유. 생명주기 콜백: `@PostConstruct`(의존성 주입 완료 직후 실행, 초기화), `@PreDestroy`(소멸 직전 실행, 리소스 해제).
+
+**꼬리 질문 예시**:
+- "@Component와 @Bean을 헷갈리면 어떤 문제가 생기나요?"
+- "Singleton Bean에 상태를 저장하면 왜 위험한가요?" → 여러 요청이 같은 인스턴스를 공유해 race condition 발생
+
+**면접 세션 피드백 (2026-04-17 4회차)**:
+- 잘한 점: @PostConstruct/@PreDestroy 타이밍 정확
+- 보완: IoC 컨테이너 역할·@Component vs @Bean 차이·Singleton 스코프 모두 모름 — 인포뱅크 필수 스택 기초 질문이므로 반드시 암기
+
+---
+
 ## 작성 예정
 
 - JVM GC 알고리즘 (G1GC, ZGC)
-- Spring Bean 스코프와 생명주기
 - Java Virtual Thread (Project Loom)
 - 동시성: synchronized, Lock, atomic
 

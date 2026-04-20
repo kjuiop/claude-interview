@@ -9,6 +9,11 @@ tags: [home, index]
 
 ---
 
+## 라이브코딩 연습
+- [[live-coding/2026-04-20]] — 채팅방 API (Gin, sync.Map, RWMutex)
+
+---
+
 ## Harness Layer
 - [[_harness/status]] — 현재 준비 수준, 취약 기술, 우선순위
 - [[_harness/constraints]] — 아키텍처 제약, 파일 형식 규칙
@@ -21,7 +26,11 @@ tags: [home, index]
 
 ## 지원 공고
 - [[jobs/whitecube-challengers/job]] — 화이트큐브 챌린저스 백엔드
+- [[jobs/neptune-backend/job]] — 넵튠 솔루션개발실 백엔드
 - [[jobs/wag-backend/job]] — 와그(WAUG) 백엔드 개발자 (Java/PHP, 서류통과)
+- [[jobs/infobank-ixpert-ai-product-engineer/job]] — 인포뱅크 iXpert AI Product Engineer (Java/Spring/RabbitMQ/LLM)
+- [[jobs/buzzni-ax-backend/job]] — 버즈니 에이플러스 AX 백엔드 엔지니어 (AI×이커머스 SaaS, LLM/RAG, 홈쇼핑모아)
+- [[jobs/enliple-backend-java/job]] — 인라이플 백엔드 개발자 Java (AD Tech, 라이브방송/데이터파이프라인, ClickHouse/Kafka)
 
 ---
 
