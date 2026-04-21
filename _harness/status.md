@@ -38,7 +38,7 @@ updated: 2026-04-20
 | python-fastapi | ★★★☆☆ | 2026-04-02 | DI 개념 이해 있음. Depends() yield 패턴(setup/teardown), 요청 스코프 vs @Autowired 싱글톤 차이 암기 필요 |
 | java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
 | networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
-| mysql | ★★★★☆ | 2026-04-10 | 복합 인덱스 순서·커버링 인덱스 정확. 인덱스 무력화 원인 정밀화 필요 — 함수 적용 시 범위 조건 변환(`>= AND <`), LIKE 앞 와일드카드 |
+| mysql | ★★★★☆ | 2026-04-21 | 복합 인덱스 원칙·커버링 인덱스 정확. 지연 조인(Deferred Join) SQL 패턴 미답변 — SELECT * 상황에서 서브쿼리+PK JOIN 패턴 암기 필요. 커서 기반 페이지네이션 미언급 |
 | redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
 | kafka | ★★★★☆ | 2026-04-12 | acks/idempotence 전체 흐름 파악. PID 재시작 주체 오류(브로커→Producer 교정). acks=1 트레이드오프 표현 보완 필요 |
 | rabbitmq | ★★★☆☆ | 2026-04-17 | Exchange 타입 정확. DLQ `x-dead-letter-exchange` 속성명 + `NACK+requeue=false` + `x-death` 헤더명 — 3회 연속 꼬리 질문 막힘. 코드 레벨 선언 암기 최우선 |
