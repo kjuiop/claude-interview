@@ -164,6 +164,11 @@ Spring AOP가 동작하지 않는 케이스를 이해하려면 먼저 Spring AOP
 - 잘한 점: REQUIRED join 개념 정확. NESTED 세이브포인트 → 부분 롤백, 외부 트랜잭션 계속 진행 정확.
 - 보완: NESTED vs REQUIRES_NEW 커넥션 차이 미언급. JPA 미지원 이유 구체화 필요. 실무 경험(감사 로그 REQUIRES_NEW) 연결 없음.
 
+**면접 세션 피드백 (2026-04-28 2회차)**:
+- 잘한 점: REQUIRED/REQUIRES_NEW/NESTED 세 전파 속성 핵심 차이 명확. REQUIRES_NEW 커넥션 2개 + 독립성 트레이드오프 언급.
+- 보완: JPA NESTED 미지원 원인 → JpaTransactionManager가 savepoint 미지원, 영속성 컨텍스트와 DB 상태 불일치 위험 때문. NESTED 실무 사례(배치 부분 실패 허용) 추가하면 완성도 향상.
+- 점수: 7/10
+
 ---
 
 ## JPA N+1
@@ -375,3 +380,58 @@ http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 **꼬리 질문:**
 - JWT Filter를 구현할 때 상속받는 클래스는? (`OncePerRequestFilter`)
 - `UsernamePasswordAuthenticationFilter` 앞에 배치하는 이유는?
+
+---
+
+## @Async 비동기 처리 패턴과 @Transactional 관계
+
+**난이도**: 기초
+
+**핵심 키워드**: @Async, ThreadLocal, 트랜잭션 미전파, 스레드 풀 고갈, TaskRejectedException, Outbox 패턴, Kafka
+
+**모범 답변 방향**:
+
+`@Async`는 Spring에서 메서드를 비동기로 실행하는 어노테이션으로, 해당 메서드는 별도의 스레드 풀에서 실행됩니다. 가장 큰 장점은 저장이나 알림 전송처럼 시간이 걸리는 I/O 작업을 caller 스레드의 응답 흐름에서 분리할 수 있다는 것입니다. 예를 들어 사용자 행동 로그를 저장하는 작업에 `@Async`를 적용하면 로그 저장 시간이 API 응답 지연에 영향을 주지 않아 caller 스레드의 레이턴시를 낮출 수 있습니다. 그러나 단점도 분명합니다. 비동기 스레드에서 저장 실패가 발생해도 caller는 이미 응답을 완료한 상태이기 때문에 유실된 데이터를 복구할 수단이 없습니다. 또한 스레드 풀이 가득 찼을 때 `corePoolSize`와 `queueCapacity` 설정에 따라 `TaskRejectedException`이 발생하거나, `CallerRunsPolicy`로 caller 스레드가 직접 처리하게 되어 응답이 블로킹됩니다. 데이터 유실이 허용되지 않는 경우에는 두 가지 전환 전략이 있습니다. 첫째는 Kafka를 통한 비동기 처리입니다. 메시지를 Kafka에 발행하고 컨슈머가 저장하는 방식으로, Kafka의 내구성 덕분에 데이터 유실 없이 비동기 처리가 가능하지만 Kafka 인프라가 필요합니다. 둘째는 Outbox 패턴입니다. Kafka가 없는 환경에서 메인 트랜잭션 안에 Outbox 테이블에 이벤트를 함께 기록하고 별도 워커가 폴링해서 처리하는 방식으로, 트랜잭션의 원자성 덕분에 메인 비즈니스 로직의 성공·실패와 이벤트 기록이 항상 일치해 유실이 방지됩니다. `@Transactional`과의 관계도 중요합니다. Spring 트랜잭션 컨텍스트는 `ThreadLocal`에 저장되는데, `@Async`는 새 스레드를 생성하므로 caller의 `ThreadLocal`을 공유하지 않습니다. 따라서 `@Async` 메서드에는 caller의 트랜잭션이 전파되지 않으며, `@Transactional`을 함께 선언하면 완전히 새로운 독립 트랜잭션이 시작됩니다.
+
+**꼬리 질문 예시**:
+- `@Async` 스레드 풀이 가득 찼을 때 기본 동작은? → `TaskRejectedException` 또는 `CallerRunsPolicy` (설정에 따라 다름)
+- caller에 트랜잭션이 있을 때 `@Async` 메서드에서 같은 트랜잭션을 쓰려면? → 불가. 별도 트랜잭션이 필요하거나 동기 방식으로 변경해야 함.
+
+**면접 세션 피드백 (2026-04-27 1회차)**:
+- 잘한 점: @Async 장단점 + Kafka 전환 방향 정확. @Transactional 미전파 이유(스레드 분리) 꼬리에서 정확 답변.
+- 보완: 스레드 풀 고갈(`corePoolSize`, `queueCapacity`) 미언급. Outbox 패턴 미언급. ThreadLocal 메커니즘 구체화 필요.
+- 점수: 7/10
+
+---
+
+## WebSocket과 STOMP — @MessageMapping / @SendTo / SimpMessagingTemplate
+
+**난이도**: 기초
+
+**핵심 키워드**: WebSocket 양방향 커넥션, STOMP 메시지 프로토콜, 목적지 기반 라우팅, @MessageMapping, @SendTo(브로드캐스트), @SendToUser(1:1), SimpMessagingTemplate(서버 능동 push)
+
+**모범 답변 방향**:
+
+WebSocket은 HTTP 핸드셰이크를 통해 한 번 연결이 수립되면 클라이언트와 서버가 양방향으로 자유롭게 메시지를 주고받을 수 있는 프로토콜입니다. HTTP와 달리 연결이 유지되기 때문에 서버가 클라이언트에게 먼저 데이터를 push할 수 있어 실시간 채팅, 알림, 라이브 스트리밍 상태 공유 같은 기능에 적합합니다. 그러나 WebSocket 자체는 단순히 양방향 커넥션만 제공할 뿐, 메시지 포맷이나 라우팅, 구독 관리 체계는 없습니다. 개발자가 직접 메시지 포맷을 정의하고 어떤 클라이언트에게 보낼지 판단하는 로직을 구현해야 합니다. STOMP(Simple Text Oriented Messaging Protocol)는 이 한계를 보완하는 WebSocket 위의 메시지 프로토콜입니다. CONNECT, SEND, SUBSCRIBE, UNSUBSCRIBE 같은 명령 체계와 destination 기반 라우팅, 헤더 기반 인증을 표준으로 정의하기 때문에 Spring과 함께 쓰면 채팅방 같은 구독 구조를 간결하게 구현할 수 있습니다. Spring에서 제공하는 세 가지 어노테이션의 역할 구분이 중요합니다. `@MessageMapping("/send")`는 클라이언트가 `/app/send`로 보낸 메시지를 핸들러 메서드에 매핑하는 역할로, HTTP의 `@RequestMapping`과 유사합니다. `@SendTo("/topic/room-1")`는 메서드의 반환값을 해당 토픽을 구독한 모든 클라이언트에게 브로드캐스트합니다. 여기서 자주 혼동하는 포인트가 있는데, `@SendTo`는 1:1 전송이 아니라 구독자 전체에게 보내는 브로드캐스트입니다. 특정 사용자 1명에게만 전송하려면 `@SendToUser`를 사용해야 합니다. `SimpMessagingTemplate`은 컨트롤러 메서드의 요청-응답 흐름 밖에서 서버가 능동적으로 메시지를 push해야 할 때 사용합니다. 예를 들어 스케줄러가 주기적으로 실시간 가격을 push하거나, 이벤트 핸들러에서 특정 이벤트 발생 시 관련 채팅방 구독자에게 알림을 보내는 경우가 여기에 해당합니다. 샵라이브에서 라이브 스트리밍 중 상품 정보 업데이트를 실시간으로 시청자에게 전달할 때 이와 유사한 서버 push 구조가 필요했습니다.
+
+**WebSocket vs STOMP 차이**:
+- WebSocket: 양방향 커넥션만 제공. 메시지 포맷/라우팅/구독 관리 없음. 개발자가 직접 구현 필요.
+- STOMP: WebSocket 위의 메시지 프로토콜. CONNECT/SEND/SUBSCRIBE/UNSUBSCRIBE 명령 체계. 목적지(destination) 기반 라우팅. 헤더 기반 인증 지원.
+
+**Spring 어노테이션 역할 정리**:
+| | 역할 | 방향 |
+|---|---|---|
+| `@MessageMapping("/send")` | `/app/send`로 오는 클라이언트 SEND 메시지를 핸들러에 매핑 | 클라이언트 → 서버 |
+| `@SendTo("/topic/room-1")` | 처리 결과를 해당 토픽 구독자 전체에게 브로드캐스트 | 서버 → 다수 클라이언트 |
+| `@SendToUser` | 특정 사용자(1:1)에게 전송 | 서버 → 1명 |
+| `SimpMessagingTemplate` | 컨트롤러 외부(서비스/스케줄러)에서 서버가 능동적으로 push | 서버 → 클라이언트 |
+
+**자주 틀리는 포인트**:
+- `@SendTo` ≠ 1:1 전송 → 브로드캐스트(구독자 전체)
+- 1:1 전송 = `@SendToUser`
+- `SimpMessagingTemplate` = 요청-응답 흐름 밖에서 서버가 직접 메시지 push (스케줄러, 이벤트 핸들러 등)
+
+**면접 세션 피드백 (2026-04-28 3회차)**:
+- 잘한 점: WebSocket 라우팅 부재 vs STOMP 목적지 기반 라우팅 차이 정확. 채팅방 ID 기반 구독 개념 올바름.
+- 보완: @SendTo를 1:1로 오해 → 실제는 브로드캐스트. @SendToUser가 1:1. SimpMessagingTemplate 역할(서버 능동 push, 컨트롤러 외부) 미설명.
+- 점수: 5/10 (@SendTo 역할 오류로 꼬리 질문 "모르겠습니다")

@@ -1,6 +1,6 @@
 ---
 tags: [kafka, messaging, event-streaming, backend]
-related: [rabbitmq, zookeeper, distributed-systems]
+related: [rabbitmq, zookeeper, distributed-systems, elasticsearch, system-design]
 ---
 
 # Kafka — 핵심 개념 정리

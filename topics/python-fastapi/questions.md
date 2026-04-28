@@ -108,3 +108,8 @@ async def me(user: User = Depends(get_current_user)):
   - `yield` 패턴 신규 암기: `yield` 이전 = setup, 이후 finally = teardown. 요청 완료 후 `db.close()` 보장.
   - `@Autowired`(싱글톤, 클래스 필드) vs `Depends()`(요청 스코프, 함수 파라미터) 차이 명시 필요
   - 구체적 예시(`get_db`, `get_current_user`) 암기하여 면접에서 코드 수준으로 설명할 것
+
+**면접 세션 피드백 (2026-04-28 4회차)**:
+- 잘한 점: yield setup/teardown 구분, Go defer/Java finally 비유 정확. Spring 싱글톤 생성/재사용 동작 정확.
+- 보완: **요청 스코프 격리 메커니즘 미언급** — FastAPI는 요청마다 Depends() 제너레이터를 새로 실행해 독립 인스턴스를 생성함. 이것이 Spring 싱글톤과의 핵심 차이. "매 요청마다 새 인스턴스 생성 → 요청 스코프" 표현 암기 필요.
+- 점수: 5/10 (꼬리 질문 "모르겠습니다")

@@ -134,6 +134,18 @@ Rate Limiting 알고리즘을 선택할 때는 burst 허용 여부와 메모리 
 
 **핵심 키워드**: Connection Timeout, Read Timeout, Retry, Exponential Backoff, Circuit Breaker, Resilience4j, Fallback, DLQ, Graceful Degradation
 
+**모범 답변 방향**:
+
+외부 API 장애는 내부 서비스 전체를 마비시킬 수 있는 가장 위험한 장애 유형 중 하나입니다. 파트너사 API가 5초 이상 지연될 때 적절한 처리 없이 두면, 요청을 처리 중인 스레드가 계속 block 상태로 쌓이면서 스레드 풀이 소진되고 내부 서비스 전체가 응답 불능 상태에 빠질 수 있습니다. 이를 방지하기 위해 네 단계로 대응합니다.
+
+첫 번째는 Timeout 설정입니다. Connection Timeout은 1초, Read Timeout은 3초로 설정해 외부 API가 응답하지 않더라도 정해진 시간 안에 제어권을 돌려받습니다. Timeout 설정이 없으면 단 몇 개의 느린 외부 API 호출만으로도 스레드 풀 전체가 잠길 수 있기 때문에, 이 설정은 선택이 아니라 필수입니다.
+
+두 번째는 Retry와 Exponential Backoff입니다. 네트워크 순간 불안정이나 일시적인 오류는 재시도로 해결할 수 있습니다. 최대 3회 재시도를 기준으로, 대기 시간은 1초, 2초, 4초로 지수적으로 늘립니다. 재시도 대상은 Timeout이나 5xx 서버 오류에 한정하고, 4xx 클라이언트 오류는 재시도해도 결과가 같으므로 즉시 실패 처리합니다. Exponential Backoff를 쓰는 이유는 일제히 재시도하는 retry storm을 방지하기 위해서입니다.
+
+세 번째는 Circuit Breaker 패턴입니다. Retry를 거쳐도 계속 실패가 누적되면, 요청을 보내는 행위 자체가 자원 낭비입니다. Resilience4j의 Circuit Breaker는 Closed, Open, Half-Open 세 가지 상태로 동작합니다. 정상 상태인 Closed에서는 요청이 그대로 전달됩니다. 실패율이 설정한 임계값, 예를 들어 50%를 초과하면 Open으로 전환되고 이후 요청은 외부 API를 호출하지 않고 즉시 거부합니다. 일정 시간이 지나면 Half-Open으로 전환돼 제한적으로 시험 요청을 보내고, 성공하면 Closed로 복귀하고 실패하면 다시 Open 상태를 유지합니다. 이 패턴은 파트너사 장애가 내부 서비스 전체로 전파되는 Cascading Failure를 막는 핵심 메커니즘입니다.
+
+네 번째는 Fallback, 즉 Graceful Degradation입니다. Circuit이 Open 상태일 때 사용자에게 아무 응답도 주지 않으면 UX가 망가집니다. 대신 "파트너사 일시 서비스 불가" 안내 메시지를 반환하거나, 캐시된 이전 재고 데이터를 반환하거나, 요청을 대기열에 등록해 복구 후 처리하는 방식으로 서비스를 부분 유지합니다. 인포뱅크 면접 준비에서 Circuit Breaker 상태 전환과 Fallback 전략을 다룬 경험이 있어, 이 패턴이 실제로 외부 의존성 장애를 격리하는 데 얼마나 중요한지 체감하고 있습니다.
+
 **4단계 답변 구조 (암기):**
 
 1. **Timeout 설정** — 무한 block 방지

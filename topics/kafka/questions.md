@@ -47,6 +47,11 @@ Kafka의 전달 보장 수준은 offset commit 시점에 따라 세 가지로 �
 - "`abortTransaction()` 후 메시지는?" → 토픽에 기록되지만 `read_committed` 컨슈머는 볼 수 없음 (marker로 표시됨)
 - "Zombie Fencing이란?" → 같은 `transactional.id`로 새 Producer 시작 시 이전 zombie Producer의 write를 자동 차단. 분산 환경에서 중복 발행 방지.
 
+**면접 세션 피드백 (2026-04-28 2회차)**:
+- 잘한 점: enable.idempotence+PID/Sequence, isolation.level=read_committed, transactional.id, Outbox/Inbox 패턴까지 전 레이어를 계층별로 완벽히 설명. 10/10.
+- 보완: transactional.id 설명에서 "전체 롤백"보다 "이전 Producer의 미완료 트랜잭션 Abort + 새 Producer Epoch 활성화"가 더 정확한 표현.
+- 점수: 10/10
+
 ---
 
 ## acks 설정 및 내구성 보장

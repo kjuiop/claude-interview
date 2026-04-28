@@ -38,6 +38,11 @@ related: [kubernetes/concepts]
 - 처음 접한 주제 — 위 구조 전체 암기 필요
 - 이력서 K8s 실운영 경험 연결: Kafka StatefulSet volumeClaimTemplates 구성 방식 설명 가능해야 함
 
+**면접 세션 피드백 (2026-04-28 3회차)**:
+- 잘한 점: Pod 명명 고정, 안정적 DNS, Kafka 브로커 ID 일관성 이유 파악. StatefulSet 사용 대상(MySQL/Redis/Kafka) 정확.
+- 보완: volumeClaimTemplates → Pod마다 독립 PVC 자동 생성(`data-kafka-0`, `data-kafka-1`), Pod 재시작 시 동일 PVC 재바인딩으로 데이터 보존. 이 동작을 정확히 설명해야 함.
+- 점수: 5/10 (volumeClaimTemplates 꼬리 질문 "모르겠습니다")
+
 ---
 
 ## Kubernetes에서 서비스 무중단 배포를 보장하기 위해 어떤 전략을 사용했나요? HPA는 어떤 기준으로 설정하나요?
@@ -309,5 +314,47 @@ spec:
 **면접 세션 피드백 (2026-04-13 2회차)**:
 - 잘한 점: ReadinessProbe·LivenessProbe 핵심 역할 방향 맞음.
 - 보완: StartupProbe = "느린 시작 앱 보호, 성공 전 다른 Probe 비활성". ReadinessProbe 실패 = pod 재시작 아닌 **Service 엔드포인트 제거**. "kubectl이 재시작" → `kubelet`이 재시작.
+
+---
+
+## Istio VirtualService + DestinationRule Canary 배포
+
+**난이도**: 중급
+
+**핵심 키워드**: VirtualService, DestinationRule, subset, weight, 헤더 기반 라우팅, L7, K8s Canary 차이
+
+**구조 요약**:
+
+```
+DestinationRule: subset 정의 (Pod label 기준)
+  - stable: version=stable
+  - canary: version=canary
+
+VirtualService: 라우팅 규칙 (두 가지 독립 매칭)
+  1. 헤더 기반: x-canary: true → 100% canary
+  2. weight 기반: stable 90% / canary 10%
+```
+
+**K8s Canary와의 핵심 차이**:
+
+| | K8s Canary (replica 수 기반) | Istio Canary |
+|---|---|---|
+| 트래픽 비율 조절 | **replica 수**와 1:1 연동 | replica 수와 **독립** |
+| 헤더 기반 라우팅 | ❌ 불가 | ✅ 가능 |
+| 라우팅 레이어 | L4 (Service IP) | **L7** (헤더, 쿠키, URI) |
+| 세밀한 % 조절 | 어려움 (Pod 수로만) | weight(0~100%) 자유롭게 |
+
+**꼬리 질문 예시**:
+- "K8s Canary와 Istio Canary의 차이는?" → replica 수 vs weight 독립성, L4 vs L7
+- "헤더 기반과 weight 기반 규칙이 동시에 있으면 어떻게 동작하나요?" → 순서대로 매칭. 헤더 조건 먼저, 해당 없으면 weight 적용
+- "DestinationRule 없이 VirtualService만 쓰면 어떻게 되나요?" → subset을 참조할 수 없어 라우팅 오류 발생
+
+**면접 세션 피드백 (2026-04-28 1회차)**:
+- 잘한 점: DestinationRule = subset 정의(name + label), VirtualService = 라우팅 규칙 역할 분리 정확. weight + 헤더 두 방식 모두 언급. K8s Canary 헤더 기반 불가 파악.
+- 보완:
+  - **K8s Canary 한계 정확화**: replica 수 = 트래픽 비율 1:1 연동. 10% canary = Pod 비율로만 조절 가능.
+  - **헤더+weight 분리 규칙**: 두 가지는 별개 매칭. 헤더 조건 먼저 적용, 미해당 트래픽이 weight로 넘어가는 구조.
+  - **L7 라우팅**: Istio = L7, K8s Service = L4. 헤더/쿠키/URI 기반 조건은 L7에서만 가능.
+- 점수: 7/10
 
 ---

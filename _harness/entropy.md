@@ -1,6 +1,6 @@
 ---
 type: harness-entropy
-updated: 2026-04-20
+updated: 2026-04-28
 ---
 
 # 엔트로피 추적 (Entropy Management)
@@ -61,6 +61,10 @@ updated: 2026-04-20
 | 2026-04-20 | 3회차 | Istio VirtualService/DestinationRule Canary 패턴 완전 미지(0/10) | kubernetes/questions.md YAML 패턴 암기. subset+weight+headers 조건 코드 수준 |
 | 2026-04-20 | 3회차 | LLM Hallucination Temperature·CoT·Re-ranking 미언급 | ai-stt/questions.md Hallucination 섹션 추가 완료. 이력서(STT→RAG) 연결 훈련 필요 |
 | 2026-04-20 | 4회차 | goroutine leak close(ch) 패턴 미언급 — "특정값 보내 nil 변경"으로 오답 | golang/goroutine.md close(ch) vs nil channel 차이 패턴 추가 완료. 암기 필요 |
+| 2026-04-28 | 3회차 | WebSocket/STOMP — @SendTo를 1:1로 오해. @SendToUser, SimpMessagingTemplate 역할 미설명(5/10) | java/questions.md WebSocket 섹션 모범 답변 추가 완료. 어노테이션 역할 3종 구분 반복 필요 |
+| 2026-04-28 | 3회차 | K8s volumeClaimTemplates — Pod별 독립 PVC 자동생성 동작 꼬리 "모르겠습니다"(5/10) | kubernetes/questions.md StatefulSet 섹션 보완. data-kafka-0/data-kafka-1 패턴 암기 필요 |
+| 2026-04-28 | 4회차 | FastAPI Depends() — 요청 스코프 격리 메커니즘 꼬리 "모르겠습니다"(5/10) | "매 요청마다 새 인스턴스 생성 → 요청 스코프" 표현 암기 필요 |
+| 2026-04-28 | 1회차 | PostgreSQL XID Wraparound — autovacuum 실패의 치명적 위험 미언급(6/10) | 32비트 XID 한계, freeze 동작, 쓰기 전면 차단 → 모범 답변에 포함됨 |
 
 ---
 

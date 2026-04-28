@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-20
+updated: 2026-04-28
 ---
 
 # 현재 준비 상태 스냅샷
@@ -35,32 +35,32 @@ updated: 2026-04-20
 | golang/clean-architecture | ★★★★☆ | 2026-03-31 | 레이어별 에러 변환 흐름 정착 |
 | golang/hexagonal | ★★★★★ | 2026-04-12 | In-Memory=stateful, Adapter→Port 방향, DIP 전부 교정 완료 |
 | mongodb | ★★★★☆ | 2026-04-02 | Aggregation Pipeline 구조적 추론 가능. `$group` 문법(`$sum: 1`) + `$match` 앞 배치 이유 보완 필요 |
-| python-fastapi | ★★★☆☆ | 2026-04-02 | DI 개념 이해 있음. Depends() yield 패턴(setup/teardown), 요청 스코프 vs @Autowired 싱글톤 차이 암기 필요 |
+| python-fastapi | ★★★☆☆ | 2026-04-28 | yield setup/teardown 구분 가능. 요청 스코프 격리 메커니즘 미답변(5/10) — "매 요청마다 새 인스턴스 생성" 표현 암기 필요 |
 | java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
 | networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
 | mysql | ★★★★☆ | 2026-04-21 | 복합 인덱스 원칙·커버링 인덱스 정확. 지연 조인(Deferred Join) SQL 패턴 미답변 — SELECT * 상황에서 서브쿼리+PK JOIN 패턴 암기 필요. 커서 기반 페이지네이션 미언급 |
 | redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
-| kafka | ★★★★☆ | 2026-04-12 | acks/idempotence 전체 흐름 파악. PID 재시작 주체 오류(브로커→Producer 교정). acks=1 트레이드오프 표현 보완 필요 |
-| rabbitmq | ★★★☆☆ | 2026-04-17 | Exchange 타입 정확. DLQ `x-dead-letter-exchange` 속성명 + `NACK+requeue=false` + `x-death` 헤더명 — 3회 연속 꼬리 질문 막힘. 코드 레벨 선언 암기 최우선 |
+| kafka | ★★★★★ | 2026-04-28 | Exactly-Once 10/10 — PID+Sequence/transactional.id/isolation.level/Outbox+Inbox 전 레이어 완벽 설명 ✅ |
+| rabbitmq | ★★★★☆ | 2026-04-28 | DLQ 3조건(TTL/NACK+requeue=false/x-max-length) + x-dead-letter-exchange 속성명 + x-death 헤더(count/reason/queue/exchange) 4회 연속 블로킹 드디어 해결 ✅ |
 | kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
-| kubernetes | ★★★☆☆ | 2026-04-20 | StatefulSet 전혀 모름 — Pod identity, PVC volumeClaimTemplates, Kafka/MySQL StatefulSet 이유 암기 필요. Istio VirtualService/DestinationRule Canary 패턴 완전 미지 — YAML 암기 최우선 |
+| kubernetes | ★★★☆☆ | 2026-04-28 | StatefulSet 개념·이유 파악, volumeClaimTemplates Pod별 독립 PVC 자동생성 여전히 모름(5/10). Istio Canary 7/10(L7 vs L4, replica vs weight 독립성 추가 필요) |
 | zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
 | distributed-systems | ★★★☆☆ | 2026-04-12 | 2PC 전혀 모름 — Phase 1/2 흐름, Blocking 원인, 3PC 차이 암기 필요. Saga 선택 이유 방향은 알고 있음 |
-| elasticsearch | ★★★☆☆ | 2026-04-20 | Analyzer 3단계명(Character Filter/Tokenizer/Token Filter) 2회 연속 미언급 — 최우선 암기. Term Dictionary FST 구조, Posting List TF/position/offset 추가 암기 필요 |
-| postgresql | ★★★☆☆ | 2026-04-02 | Dead Tuple/VACUUM 전혀 몰랐음. XID Wraparound 신규 암기 최우선 |
+| elasticsearch | ★★★★☆ | 2026-04-28 | Analyzer 3단계 7/10 해결. Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 추가 암기 필요 |
+| postgresql | ★★★☆☆ | 2026-04-28 | MVCC/Dead Tuple/VACUUM 6/10. XID Wraparound(32비트 트랜잭션 ID 한계, 쓰기 전면 차단) 개념 인지. xmin/xmax 내부 구조 추가 학습 필요 |
 | java/spring | ★★★★★ | 2026-04-02 | AOP 3문제 복습 완료. 횡단 관심사·JoinPoint/Pointcut·self-invocation 모두 교정됨 |
 
 ---
 
 ## 다음 우선순위
 
-1. `rabbitmq` — `x-dead-letter-exchange` 큐 선언 코드(`QueueBuilder.withArgument`), `NACK+requeue=false`, `x-death` 헤더명 암기 (3회 연속 막힘 — 최우선)
-2. `kubernetes/Istio` — VirtualService/DestinationRule Canary YAML 패턴 (subset+weight+headers 조건) — 완전 미지 영역 (0/10)
-3. `elasticsearch` — Analyzer 3단계(Character Filter → Tokenizer → Token Filter) 2회 연속 미언급. Term Dictionary FST·Posting List TF/position — 최우선 암기
-4. `ai-stt/Hallucination` — Temperature·Chain-of-Thought·Re-ranking 3가지 미언급. 이력서(STT→RAG) 연결 훈련 필요
-5. `mysql/oracle` — Oracle vs MySQL 4가지 차이 암기: 페이징(ROWNUM vs LIMIT), NULL(`''`=NULL vs 구분), 시퀀스 vs AUTO_INCREMENT, 기본 격리수준(READ COMMITTED vs REPEATABLE READ)
-6. `java/@Transactional` — NESTED JPA 미지원 이유, REQUIRES_NEW 2커넥션 트레이드오프, savepoint 표현 정확화
-7. `kafka` — exactly-once transactional API 전체 흐름 복습
+1. `java/WebSocket+STOMP` — @SendTo(브로드캐스트) vs @SendToUser(1:1) vs SimpMessagingTemplate(서버 능동 push) 역할 구분 (5/10, @SendTo 역할 오해로 꼬리 "모르겠습니다")
+2. `kubernetes/StatefulSet` — volumeClaimTemplates Pod별 독립 PVC 자동생성(kafka-0→data-kafka-0) 동작 암기 (5/10, 꼬리 "모르겠습니다")
+3. `python-fastapi/Depends` — "매 요청마다 새 인스턴스 생성 → 요청 스코프" 표현 암기. Spring 싱글톤 vs FastAPI 요청 스코프 차이 (5/10)
+4. `elasticsearch` — Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 상세 암기
+5. `postgresql` — xmin/xmax 내부 구조, XID Wraparound freeze 동작 상세
+6. `ai-stt/Hallucination` — Temperature·Chain-of-Thought·Re-ranking 3가지 미언급. 이력서(STT→RAG) 연결 훈련 필요
+7. `mysql/oracle` — Oracle vs MySQL 4가지 차이 암기: 페이징(ROWNUM vs LIMIT), NULL(`''`=NULL vs 구분), 시퀀스 vs AUTO_INCREMENT, 기본 격리수준(READ COMMITTED vs REPEATABLE READ)
 8. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습
 9. `distributed-systems` — 멱등키 구현 패턴(Idempotency-Key + Redis TTL) 코드 수준 암기
 
@@ -70,10 +70,11 @@ updated: 2026-04-20
 
 | 회사 | 세션 수 | 마지막 피드백 요약 |
 |---|---|---|
-| 화이트큐브 | 8 | 2026-04-12 세션(총 6회차) — Go Map/sync.Map/Hexagonal/Redis AOF 전부 교정 완료. K8s StatefulSet·2PC 신규 교정. GC Tricolor 색상 정의 여전히 불완전 — 내일 최우선 복습 |
+| 화이트큐브 | 11 | 2026-04-28 세션 — K8s StatefulSet 5/10(volumeClaimTemplates 꼬리 모름), Istio Canary 7/10, PostgreSQL MVCC 6/10(XID Wraparound 미언급) |
 | 넵튠 | 5 | 2026-04-14 세션(2회차) — Go channel fan-out·nil channel 비활성화 완성. Kafka rebalancing 4조건(max.poll.interval.ms 교정). 광고 파이프라인 ZooKeeper Watch + Redis pub/sub 비교 강점. 공통 보완: 코드 직접 제시, Redis 장애 fallback 패턴 추가 필요 |
-| 인포뱅크 | 4 | 2026-04-17 세션(4회차) — Spring IoC/DI 1/10(@PostConstruct/@PreDestroy만 알고 IoC 역할·@Component vs @Bean·Singleton 스코프 완전 모름). 3회차: AI 배속 CER 7/10, Oracle vs MySQL 1/10(완전 모름), JPA fetch join+Pageable 7/10 |
-| 채널톡 | 4 | 2026-04-17 세션(2회차 채널톡 질문 포함) — Webhook CRM 설계 9/10(Kafka 멱등성 3종 세트 완벽). 다음: 대표 경험 4가지(MultiCDN/S3파이프라인/ZooKeeper/CMAF) 30초 즉답 암기, 126배 수치 선제 연결 훈련 |
+| 인포뱅크 | 7 | 2026-04-28 세션 — @Transactional NESTED 7/10(영속성 컨텍스트 불일치 원인 추가 필요), WebSocket/STOMP 5/10(@SendTo 역할 오해), FastAPI Depends() 5/10(요청 스코프 격리 미언급), RabbitMQ DLQ 9/10 ✅ 드디어 해결 |
+| 채널톡 | 4 | 2026-04-21 불합격. archived |
+| 버즈니 | 3 | 2026-04-28 세션 — ES Analyzer 7/10, Kafka Exactly-Once 10/10 ✅, Redis pub/sub 9/10 |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---

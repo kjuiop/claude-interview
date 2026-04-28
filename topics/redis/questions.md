@@ -1,6 +1,6 @@
 ---
 tags: [redis, 면접질문, distributed-lock, cache]
-related: [redis/concepts]
+related: [redis/concepts, distributed-systems, system-design, kafka]
 ---
 
 # Redis 면접 질문
@@ -323,6 +323,15 @@ related: [redis/concepts]
 - 분산락 해제를 MULTI/EXEC로 구현할 수 없는 이유는? → WATCH + MULTI/EXEC로 가능하지만 GET 결과를 EXEC 전에 읽어야 해서 흐름이 복잡. 조건 확인 후 분기가 불가능
 - Lua 스크립트의 단점은 무엇인가요? → 디버깅 어려움(서버 사이드 실행), 스크립트 길어지면 가독성 저하, EVALSHA 캐시 휘발성
 - Redis Cluster에서 MULTI/EXEC를 쓰면 안 되는 이유는? → 다른 슬롯의 키를 한 트랜잭션으로 묶으면 Cross-slot 에러
+
+**면접 세션 피드백 (2026-04-27 1회차)**:
+- 잘한 점: MULTI/EXEC 큐잉 → 순차 실행, 단일 노드 원자성, Lua Script 싱글 스레드 블로킹 주의점 정확
+- 보완:
+  - **Cluster Cross-slot 제약**: "다른 노드의 동시 접근"으로 잘못 설명 → 핵심은 **MULTI/EXEC에 포함된 키들이 서로 다른 해시 슬롯에 있으면 CROSSSLOT 오류 발생**. 해결: `{tag}` 해시태그로 같은 슬롯 강제 배치
+  - **no-rollback**: 꼬리 질문에서 정확히 답변 ✅
+  - **Lua 조건 분기**: `if-else` 조건부 쓰기 가능 — "조회 결과에 따라 분기" 불가한 MULTI/EXEC와의 핵심 차이 미언급
+  - **실무 연결**: `ViewerRedisRepository.addViewer()`에서 직접 MULTI/EXEC 사용 경험 언급 기회 놓침
+- 점수: 6/10 (핵심 키워드 3/5, 구조 2/3, 꼬리 1/2, 보너스 +0)
 
 > 출처: https://dgle.dev/redis-multi-lua/
 

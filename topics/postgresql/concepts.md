@@ -1,6 +1,6 @@
 ---
 tags: [postgresql, database, mvcc, backend]
-related: [mysql, distributed-systems]
+related: [mysql, distributed-systems, elasticsearch]
 ---
 
 # PostgreSQL — 핵심 개념 정리

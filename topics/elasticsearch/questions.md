@@ -42,6 +42,15 @@ related: [mysql, postgresql]
 - 보완: Analyzer 단계명 여전히 미언급(Character Filter / Tokenizer / Token Filter). Term Dictionary FST 구조 미언급. Posting List에 TF/position/offset 저장 사실 모름. 이력서 경험 연결 없음.
 - **반복 패턴**: 2회차 연속으로 Analyzer 단계명 미언급 — 반드시 암기 최우선
 
+**면접 세션 피드백 (2026-04-28 3회차)**:
+- 잘한 점: 3단계 흐름 순서 정확. Token Filter 예시(소문자화, 불용어, 어근 추출) 구체적. Character Filter 이름 꼬리 질문에서 정확히 답변. nori 형태소 분석 이유 언급.
+- 보완:
+  - **Character Filter 이름**: 초기 답변에서 "문자 단위 전처리"라고만 표현 → 반드시 "Character Filter"라는 이름을 먼저 말할 것.
+  - **Term Dictionary**: Analyzer 결과 토큰이 Term Dictionary에 정렬 저장, 이진 탐색 O(log N)으로 조회. 이 연결 고리 미언급.
+  - **Posting List 상세**: 문서 ID뿐 아니라 TF(등장 빈도), position(위치), offset도 저장. BM25 relevance score 계산에 활용.
+  - **nori 이유 구체화**: "한국어 교착어" — 어근 동일 다수 표면 형태 검색 연결.
+- 점수: 7/10 (Character Filter 꼬리에서 답변, Term Dictionary/Posting List 상세 미언급)
+
 ---
 
 ## Index / Shard / Replica 구조

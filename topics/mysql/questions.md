@@ -1,6 +1,6 @@
 ---
 tags: [mysql, database, index, interview-questions]
-related: [postgresql, redis]
+related: [postgresql, redis, elasticsearch]
 ---
 
 # MySQL — 면접 예상 질문
@@ -292,3 +292,29 @@ SELECT * FROM products WHERE category_id = ? AND id < {last_id} ORDER BY id DESC
 - 커서 기반 페이지네이션의 한계는 무엇인가요?
 
 > 출처: https://monday9pm.com/mvcc-multi-version-concurrency-control-알아보기-e4102cd97e59
+
+---
+
+## Oracle vs MySQL 핵심 차이 4가지
+
+**난이도**: 기초
+
+**핵심 키워드**: ROWNUM, FETCH FIRST, '' = NULL, SEQUENCE, AUTO_INCREMENT, READ COMMITTED, REPEATABLE READ
+
+**모범 답변 방향**:
+1. **페이징**: MySQL `LIMIT/OFFSET` vs Oracle `ROWNUM` (ORDER BY 이전 적용 주의 → 서브쿼리 필요) / Oracle 12c+ `FETCH FIRST N ROWS ONLY`
+2. **빈 문자열**: MySQL `'' ≠ NULL` vs Oracle `'' = NULL` (마이그레이션 시 데이터 불일치 위험)
+3. **자동 증가**: MySQL `AUTO_INCREMENT` vs Oracle `SEQUENCE` + `NEXTVAL` / Oracle 12c+ `IDENTITY` 컬럼
+4. **격리 수준**: MySQL InnoDB 기본 `REPEATABLE READ` vs Oracle 기본 `READ COMMITTED` (트랜잭션 내 스냅샷 일관성 차이)
+
+**Oracle 경험 없을 때 어필 방법**:
+> "MySQL을 6년 이상 실무에서 사용하며 인덱스 구조, 트랜잭션, JPA와의 연동을 깊이 이해하고 있습니다. RDBMS의 본질인 쿼리 최적화, 인덱스 설계, 트랜잭션 관리는 Oracle과 MySQL이 공유하는 영역입니다. 4가지 핵심 차이를 이미 파악하고 왔으며 실무 투입 후 빠르게 적응할 수 있습니다."
+
+**꼬리 질문 예시**:
+- Oracle에서 `ORDER BY`와 `ROWNUM`을 함께 쓸 때 주의점은? → ROWNUM이 ORDER BY 이전에 적용 → 서브쿼리로 감싸야 정확한 페이징
+- Oracle에서 `WHERE column = ''`로 조회하면 결과가 나오나요? → NULL로 저장되므로 `IS NULL`로 조회해야 함
+
+**면접 세션 피드백 (2026-04-27 1회차)**:
+- 잘한 점: 4가지 차이 모두 정확. 격리 수준 트레이드오프까지 설명.
+- 보완: Oracle 어필 방법 준비 필요 ("모르겠습니다" 금지). ROWNUM + ORDER BY 주의점 추가 언급 가능.
+- 점수: 7/10 (꼬리 질문 0/2)

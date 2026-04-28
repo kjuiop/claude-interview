@@ -1,6 +1,6 @@
 ---
 tags: [rabbitmq, messaging, amqp, backend]
-related: [kafka, distributed-systems]
+related: [kafka, distributed-systems, zookeeper]
 ---
 
 # RabbitMQ — 핵심 개념 정리

@@ -84,3 +84,16 @@ Queue workQueue() {
   - **헤더명 교정** — "dead-letter-header" ❌ → `x-death` ✅ (RabbitMQ가 DLX 통과 시 자동 추가, `count` 필드로 횟수 확인)
   - **Spring AMQP 선언 코드**: `QueueBuilder.durable("work.queue").withArgument("x-dead-letter-exchange", "dlx.exchange").build()` 코드 패턴 암기 필수
 - 점수: 4/10 — 꼬리 질문 "잘 모르겠습니다" (3회 연속)
+
+**면접 세션 피드백 (2026-04-27 4회차)**:
+- 잘한 점: DLQ 개념 + 활용 목적(재발행, 원인 파악), `x-dead-letter-exchange` 원본 큐 선언 위치 정확
+- 보완 (여전히 막힌 포인트):
+  - **`NACK + requeue=false`**: NACK만으로는 DLQ 라우팅 안 됨. `basicNack(tag, false, **false**)` — 세 번째 인자 `requeue=false`가 반드시 필요
+  - **세 번째 조건 `x-max-length`**: "잘 모르겠습니다" → 큐 길이 초과 시 DLQ 이동. 3회차 이후에도 여전히 미암기
+  - **`x-death` 헤더 상세**: `count`(횟수)만 언급 → `reason`(rejected/expired/maxlen), 원본 exchange/queue, 실패 시각도 포함
+- 점수: 5/10
+
+**면접 세션 피드백 (2026-04-28 2회차)** ✅ 드디어 해결:
+- 잘한 점: DLQ 이동 3가지 조건(TTL, NACK+requeue=false, x-max-length) 모두 정확. x-dead-letter-exchange 속성명 정확. x-death 헤더 구성(재시도 횟수, 실패 이유, 원본 큐/Exchange) 모두 언급.
+- 보완: x-death 헤더에서 재시도 횟수는 `count` 필드명으로 접근. 실무 패턴: `x-death[0].count >= 3`으로 최종 DLQ 판단.
+- 점수: 9/10 (4회 연속 막혔던 포인트 완전 해결)

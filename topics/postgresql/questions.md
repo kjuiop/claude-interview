@@ -1,6 +1,6 @@
 ---
 tags: [postgresql, database, mvcc, interview-questions]
-related: [mysql, distributed-systems]
+related: [mysql, distributed-systems, elasticsearch]
 ---
 
 # PostgreSQL — 면접 예상 질문
@@ -72,6 +72,13 @@ PostgreSQL의 Dead Tuple은 MVCC 구현 방식의 직접적인 결과입니다. 
 - Dead Tuple이 쿼리 성능에 미치는 영향 누락: **Page Bloat → Seq Scan 시 dead page 읽어야 함 → I/O 증가**
 - VACUUM FULL 위험 이유 오답: "데드락 발생" → **ACCESS EXCLUSIVE LOCK — SELECT조차 블록, 테이블 전체 접근 불가**
 - 대안 pg_repack 미언급: `pg_repack` — Lock 최소화 온라인 재구성, autovacuum threshold 튜닝으로 예방
+
+**면접 세션 피드백 (2026-04-28 1회차)**:
+- 잘한 점: VACUUM이 재사용 가능 표시라는 동작 정확. Dead Tuple → 디스크/성능 저하 흐름 올바름.
+- 보완:
+  - **MVCC 표현 교정**: "스냅샷을 찍는다" → 각 행에 `xmin`(생성 트랜잭션 ID) + `xmax`(삭제/수정 트랜잭션 ID) 기록하는 방식. UPDATE 시 기존 row의 xmax 설정(논리적 삭제) + 새 row INSERT.
+  - **XID Wraparound 미언급**: autovacuum 실패의 가장 치명적 위험. VACUUM이 오래된 row의 XID를 FrozenXID로 교체하지 못하면 21억 한계 도달 시 PostgreSQL이 모든 쓰기 차단 + 강제 종료. `autovacuum_freeze_max_age`(기본 2억)로 freeze 주기 제어.
+- 점수: 5/10 (XID Wraparound 완전 미언급, xmin/xmax 표현 부정확)
 
 ---
 

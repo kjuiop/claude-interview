@@ -1,6 +1,6 @@
 ---
 tags: [mysql, database, index, query-optimization]
-related: [postgresql, redis, distributed-systems]
+related: [postgresql, redis, distributed-systems, elasticsearch, java]
 ---
 
 # MySQL — 핵심 개념 정리
