@@ -283,11 +283,85 @@ Spring IoC(Inversion of Control) 컨테이너는 객체의 생성, 의존성 주
 
 ---
 
+## JPA 엔티티에 기본 생성자가 필요한 이유는 무엇인가요?
+
+**난이도**: 기초
+
+**핵심 키워드**: Reflection, Constructor.newInstance(), 기본 생성자, private 불가, JPA/Hibernate
+
+**모범 답변 (600자 이상 말하기 형태)**:
+> JPA 엔티티에 기본 생성자(no-arg constructor)가 필요한 이유는 JPA 구현체(Hibernate 등)가 엔티티 인스턴스를 생성할 때 리플렉션을 사용하기 때문입니다. Hibernate는 DB에서 조회한 ResultSet을 엔티티 객체로 변환할 때 `Constructor.newInstance()`로 파라미터 없이 인스턴스를 먼저 만든 후, 각 필드에 리플렉션(`field.setAccessible(true)` + `field.set(instance, value)`)으로 값을 채워 넣는 방식을 사용합니다. 개발자 입장에서는 명시적으로 기본 생성자를 선언하지 않아도 Java 컴파일러가 자동으로 추가해주지만, 파라미터를 받는 생성자를 하나라도 선언하면 Java는 기본 생성자를 더 이상 자동으로 추가하지 않습니다. 이 경우 Hibernate가 `Constructor.newInstance()`를 호출하면 `NoSuchMethodException`이 발생해 엔티티를 조회할 수 없게 됩니다. 따라서 파라미터 생성자를 선언한 엔티티에는 반드시 기본 생성자를 명시적으로 추가해야 합니다. 접근 제어자 관련해서는 `public` 또는 `protected` 기본 생성자가 필요합니다. `private`은 리플렉션에서 `setAccessible(true)` 없이는 접근이 불가한데, JPA 스펙 자체가 `private` 기본 생성자를 허용하지 않습니다. 실무에서는 Lombok의 `@NoArgsConstructor(access = AccessLevel.PROTECTED)`를 사용해 의도치 않은 직접 생성을 막으면서 JPA 요건도 충족하는 패턴을 많이 씁니다. 이 구조는 리플렉션이 프레임워크 내부에서 어떻게 동작하는지, 그리고 왜 개발자가 JPA 엔티티 작성 시 특정 규약을 지켜야 하는지를 보여주는 대표적인 예입니다.
+
+**꼬리 질문 예시**:
+- Hibernate가 `private` 기본 생성자를 허용하지 않는 이유는?
+- Lombok `@NoArgsConstructor(access = AccessLevel.PROTECTED)`를 쓰는 이유는?
+- CGLIB으로 Lazy Loading 프록시를 생성할 때도 기본 생성자가 필요한가요?
+
+> 출처: https://f-lab.ai/en/insight/understanding-java-reflection
+
+---
+
 ## 작성 예정
 
 - JVM GC 알고리즘 (G1GC, ZGC)
 - Java Virtual Thread (Project Loom)
 - 동시성: synchronized, Lock, atomic
+
+---
+
+## Java Reflection이란 무엇이고, 어떻게 동작하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: Class 객체, 힙 영역, 런타임 메타정보 조회, setAccessible, 성능 저하, 캡슐화 위반
+
+**모범 답변 (600자 이상 말하기 형태)**:
+> 리플렉션은 JVM이 클래스를 로드할 때 힙 영역에 생성하는 `Class<T>` 객체를 통해, 컴파일 시점에 알 수 없는 클래스의 필드·메서드·생성자·어노테이션 정보를 런타임에 동적으로 조회하고 조작할 수 있게 해주는 Java API입니다. JVM 클래스 로더가 `.class` 바이트코드를 로드하면서 클래스당 하나의 `Class` 객체를 힙에 생성하는데, 이것이 리플렉션의 진입점이 됩니다. `getDeclaredMethods()`, `getDeclaredField()` 등으로 메타정보를 꺼낼 수 있고, `setAccessible(true)`를 설정하면 `private` 멤버에도 접근 가능합니다. 실무에서는 프레임워크 레이어에서 주로 사용됩니다. Spring의 `@Autowired` 필드 주입은 리플렉션으로 `private` 필드에 직접 의존성을 주입하고, JPA는 기본 생성자로 인스턴스를 만든 뒤 리플렉션으로 `private` 필드에 DB 조회 값을 설정합니다. Jackson의 JSON 역직렬화도 리플렉션으로 어노테이션을 읽어 필드를 매핑합니다. 단점은 세 가지입니다. 첫째로 성능 저하입니다. JVM이 일반 메서드 호출에 적용하는 인라이닝·JIT 최적화를 리플렉션에는 적용하지 못해 호출 비용이 높습니다. Spring이 리플렉션으로 메서드 정보를 조회한 결과를 캐싱하는 이유가 여기 있습니다. 둘째로 컴파일 타임 타입 안전성이 없어, 잘못된 클래스명이나 메서드명은 런타임에 `ClassNotFoundException`이나 `NoSuchMethodException`으로 나타납니다. 셋째로 `setAccessible(true)`로 `private` 멤버에 접근할 수 있어 캡슐화 원칙이 깨질 위험이 있습니다. Java 9부터는 모듈 시스템이 도입되어 `module-info.java`에 `opens` 선언 없이 외부 모듈에서 리플렉션으로 접근하면 `InaccessibleObjectException`이 발생하도록 보안이 강화되었습니다.
+
+**꼬리 질문 예시**:
+- Spring의 `@Autowired` 필드 주입은 내부적으로 어떻게 동작하나요?
+- 리플렉션의 성능 문제를 실무에서 어떻게 완화할 수 있나요?
+- Java 9 모듈 시스템이 리플렉션에 미친 영향은?
+
+> 출처: https://hudi.blog/java-reflection/
+> 출처: https://f-lab.ai/en/insight/understanding-java-reflection
+
+---
+
+## JDK Dynamic Proxy와 CGLIB의 차이를 설명하고, Spring이 CGLIB를 기본으로 선택한 이유는?
+
+**난이도**: 중급
+
+**핵심 키워드**: InvocationHandler, Enhancer/MethodInterceptor, 인터페이스 필수, final 제약, proxyTargetClass, 바이트코드 조작
+
+**모범 답변 (600자 이상 말하기 형태)**:
+> JDK Dynamic Proxy와 CGLIB는 모두 런타임에 프록시 객체를 동적으로 생성하지만 메커니즘이 근본적으로 다릅니다. JDK Dynamic Proxy는 `java.lang.reflect.Proxy`와 `InvocationHandler`를 사용합니다. `Proxy.newProxyInstance()`에 ClassLoader, 구현할 인터페이스 목록, InvocationHandler를 넘기면 런타임에 해당 인터페이스를 구현하는 프록시 클래스 바이트코드가 생성됩니다. 이 프록시의 모든 메서드 호출은 `InvocationHandler.invoke(proxy, method, args)`로 위임되고, 내부에서 리플렉션(`method.invoke()`)으로 실제 메서드를 실행합니다. 핵심 제약은 대상 클래스가 반드시 인터페이스를 구현해야 한다는 점입니다. CGLIB는 ASM 바이트코드 라이브러리로 대상 클래스를 **상속**하는 서브클래스를 동적으로 생성합니다. `Enhancer.create()`로 프록시 인스턴스를 만들고, `MethodInterceptor.intercept()`로 메서드 호출을 가로챕니다. `proxy.invokeSuper()`로 부모 메서드를 직접 호출하기 때문에 리플렉션 오버헤드가 없어 JDK Proxy보다 런타임 성능이 유리합니다. 상속 기반이므로 `final` 클래스와 `final` 메서드는 오버라이드 불가하여 프록시 적용이 안 됩니다. Spring Boot 2.x 이전에는 인터페이스가 있으면 JDK Proxy, 없으면 CGLIB를 자동 선택했습니다. 2.x부터는 `spring.aop.proxy-target-class=true`가 기본값이 되어 항상 CGLIB를 사용합니다. 변경 이유는 실무에서 인터페이스 없이 `@Service`만 붙인 클래스가 많아 JDK Proxy 방식에서 AOP가 적용되지 않는 문제가 빈번했고, CGLIB가 더 예측 가능한 동작을 제공하기 때문입니다. 이 구조를 이해하면 `@Transactional`이 `final` 메서드에서 동작하지 않는 이유, self-invocation에서 AOP가 우회되는 이유도 자연스럽게 연결하여 설명할 수 있습니다.
+
+**꼬리 질문 예시**:
+- `final` 메서드에 `@Transactional`을 붙이면 왜 동작하지 않나요?
+- JDK Dynamic Proxy에서 리플렉션을 사용하는 부분은 어디인가요?
+- Spring Boot에서 CGLIB 대신 JDK Proxy로 전환하려면 어떻게 설정하나요?
+
+> 출처: https://medium.com/@JanessaTech/java-dynamic-proxy-jdk-and-cglib-26dbdcab0bf0
+> 출처: https://www.kapresoft.com/java/2023/12/28/java-proxy-vs-cglib.html
+
+---
+
+## Reflection과 Dynamic Proxy의 관계를 설명하고, Spring AOP에서 어떻게 함께 사용되나요?
+
+**난이도**: 심화
+
+**핵심 키워드**: Reflection은 Proxy의 구현 수단, InvocationHandler.invoke()의 method.invoke(), CGLIB는 리플렉션 최소화, 메타데이터 조회 vs 실행
+
+**모범 답변 (600자 이상 말하기 형태)**:
+> 리플렉션과 Dynamic Proxy는 서로 다른 계층에서 동작하며, Proxy가 리플렉션을 내부 구현 수단으로 활용하는 관계입니다. 리플렉션은 런타임에 클래스의 메타정보를 조회하고 메서드를 동적으로 호출하는 저수준 API이고, Dynamic Proxy는 리플렉션을 기반으로 "모든 메서드 호출을 한 곳에서 가로채는" 고수준 패턴입니다. JDK Dynamic Proxy에서 `InvocationHandler.invoke()`가 호출될 때 두 번째 파라미터로 `java.lang.reflect.Method` 객체가 전달됩니다. 이 `Method` 객체가 리플렉션 API의 일부이며, 핸들러 내에서 `method.invoke(target, args)`를 호출할 때 리플렉션으로 실제 메서드를 실행합니다. 즉 JDK Proxy의 메서드 가로채기 자체는 바이트코드 생성으로 구현되지만, 실제 대상 객체의 메서드 실행은 리플렉션을 사용합니다. Spring AOP에서 이 구조가 명확하게 나타납니다. CGLIB 프록시가 메서드를 가로채면 `TransactionInterceptor.invoke()`가 실행됩니다. 이 인터셉터는 리플렉션으로 메서드에 붙은 `@Transactional` 어노테이션과 속성을 읽어 전파 방식·격리 수준을 파악하고, 트랜잭션 매니저에게 트랜잭션 시작을 요청합니다. CGLIB 기반의 경우 실제 메서드 실행은 `proxy.invokeSuper()`로 부모 메서드를 직접 호출하기 때문에 리플렉션 없이 더 빠르게 동작합니다. 리플렉션은 주로 어노테이션 정보를 읽는 메타데이터 조회 단계에서 사용되고, 조회 결과는 캐싱됩니다. 정리하면, JDK Proxy는 리플렉션에 더 많이 의존하고 CGLIB는 바이트코드 조작으로 리플렉션 의존도를 줄인 것이 두 방식의 핵심 성능 차이입니다.
+
+**꼬리 질문 예시**:
+- Spring이 리플렉션으로 읽은 어노테이션 정보를 어떻게 캐싱하나요?
+- CGLIB `proxy.invokeSuper()`와 JDK Proxy `method.invoke()`의 성능 차이는 왜 발생하나요?
+
+> 출처: https://www.baeldung.com/java-dynamic-proxies
+> 출처: https://medium.com/@AlexanderObregon/the-mechanics-behind-how-java-implements-dynamic-proxy-classes-at-runtime-a8dbc23844e2
 
 ---
 
@@ -434,4 +508,36 @@ WebSocket은 HTTP 핸드셰이크를 통해 한 번 연결이 수립되면 클�
 **면접 세션 피드백 (2026-04-28 3회차)**:
 - 잘한 점: WebSocket 라우팅 부재 vs STOMP 목적지 기반 라우팅 차이 정확. 채팅방 ID 기반 구독 개념 올바름.
 - 보완: @SendTo를 1:1로 오해 → 실제는 브로드캐스트. @SendToUser가 1:1. SimpMessagingTemplate 역할(서버 능동 push, 컨트롤러 외부) 미설명.
+
+---
+
+## ConcurrentHashMap
+
+### Q. `HashMap`이 멀티스레드 환경에서 unsafe한 이유와, `Collections.synchronizedMap()`과 `ConcurrentHashMap`의 잠금 방식 차이를 설명하고 각각의 선택 기준을 설명해주세요.
+
+**난이도:** 기초
+
+**핵심 키워드:** race condition, 전체 Map lock, 버킷(배열 슬롯) 단위 lock, CAS, 읽기 lock 없음, null 허용 여부
+
+**모범 답변:**
+
+`HashMap`이 멀티스레드 환경에서 unsafe한 이유는 내부 자료구조(배열 + 연결리스트/트리)에 어떠한 동기화 장치도 없기 때문입니다. 두 스레드가 동시에 같은 버킷에 쓰면 Node 연결이 깨지거나 값이 유실됩니다. Java 8 이전에는 무한 루프(Infinite Loop)가 발생하는 케이스도 있었습니다.
+
+`Collections.synchronizedMap()`은 모든 메서드에 단일 뮤텍스(전체 Map lock)를 겁니다. 스레드 하나가 읽는 동안 다른 모든 스레드는 읽기·쓰기 모두 대기합니다. 읽기가 많은 환경에서 성능 병목이 됩니다.
+
+`ConcurrentHashMap`은 Java 8 이후 **버킷(배열 슬롯) 단위**로만 lock을 겁니다. 쓰기 시 해당 버킷의 첫 번째 Node(헤드)에만 `synchronized`를 걸기 때문에 다른 버킷을 쓰는 스레드끼리는 충돌 없이 병렬 처리됩니다. 빈 버킷에 첫 element 삽입 시 CAS로 처리합니다. `get()` 읽기는 거의 lock 없이 동작합니다.
+
+**선택 기준:**
+- 읽기 많은 캐시·카운터 집계 → `ConcurrentHashMap` (기본 선택)
+- null 키/값 허용 필요 → `synchronizedMap` (`ConcurrentHashMap`은 null 키/값 불허)
+- 레거시 `HashMap` 빠른 thread-safe 교체 → `synchronizedMap`
+
+**꼬리 질문 예시:**
+- `ConcurrentHashMap`의 `size()` 메서드는 정확한 값을 보장하나요?
+- `putIfAbsent()`가 필요한 경우는 어떤 상황인가요?
+
+**면접 세션 피드백 (2026-04-29 3회차 → 5회차 복습)**:
+- 3회차: 차이 전혀 모름 → 2/10
+- 5회차: 전체 lock vs CAS·선택 기준 파악. "버킷=8비트" 오류 → 버킷=**배열 슬롯** 교정. 읽기 lock 없음 ✅. 6/10
+- 반드시 암기: 버킷 = 배열 인덱스(슬롯), Java 8 이후 버킷 헤드 Node에 synchronized + 빈 버킷은 CAS
 - 점수: 5/10 (@SendTo 역할 오류로 꼬리 질문 "모르겠습니다")

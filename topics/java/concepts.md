@@ -269,3 +269,148 @@ con.rollback();
 - JVM 구조 & GC
 - 동시성 (Thread, ExecutorService, CompletableFuture)
 - Java 17~21 주요 변경사항 (Record, Sealed Class, Virtual Thread)
+
+---
+
+## Java Reflection (리플렉션)
+
+### 개념
+
+Reflection은 JVM이 클래스를 로드할 때 생성하는 `Class` 객체를 통해, **컴파일 타임에 알 수 없는 클래스의 정보(필드, 메서드, 생성자, 어노테이션 등)를 런타임에 조회하고 조작하는 API**다.
+
+클래스 파일(`.class`)은 컴파일 시 바이트코드로 변환되고, JVM 클래스 로더가 이를 로드하면서 **힙 영역에 `Class<T>` 타입 객체를 하나 생성**한다. 이 `Class` 객체가 리플렉션의 진입점이며, 여기서 `getDeclaredMethods()`, `getDeclaredFields()`, `getDeclaredConstructors()` 등을 통해 클래스 메타정보를 꺼낼 수 있다.
+
+```
+[소스 파일] → 컴파일 → [바이트코드 .class]
+                                 ↓ 클래스 로더
+              [힙: Class<Foo> 객체] ← 리플렉션 진입점
+```
+
+### 주요 API
+
+| API | 역할 |
+|---|---|
+| `Class.forName("com.example.Foo")` | 클래스 이름으로 `Class` 객체 로드 |
+| `clazz.getDeclaredMethods()` | 해당 클래스 선언 메서드 목록 (상속 제외) |
+| `clazz.getDeclaredField("name")` | 특정 필드 조회 |
+| `field.setAccessible(true)` | `private` 필드/메서드 접근 허용 |
+| `method.invoke(obj, args...)` | 메서드 동적 호출 |
+| `constructor.newInstance(args...)` | 생성자로 객체 동적 생성 |
+
+### 실무 활용처
+
+| 활용처 | 설명 |
+|---|---|
+| **Spring DI** | `@Autowired`로 `private` 필드에도 의존성 주입 (field injection 방식) |
+| **Spring AOP** | CGLIB/JDK Proxy가 메서드 메타정보를 리플렉션으로 획득 |
+| **JPA** | 엔티티의 `private` 필드에 직접 값 설정 (기본 생성자 + 리플렉션) |
+| **JSON 직렬화** | Jackson이 `@JsonProperty` 어노테이션을 리플렉션으로 읽어 필드 매핑 |
+| **테스트 유틸** | `private` 메서드 테스트, 의존성 주입 목적 |
+
+### 단점 및 주의사항
+
+| 단점 | 설명 |
+|---|---|
+| **성능 저하** | 일반 메서드 호출보다 느림. JVM이 바이트코드 최적화(인라이닝 등)를 적용 못함 |
+| **컴파일 타임 타입 안전성 없음** | 잘못된 클래스명·메서드명은 런타임에 `ClassNotFoundException`, `NoSuchMethodException` 발생 |
+| **캡슐화 위반** | `setAccessible(true)`로 `private` 멤버에 접근 가능 → 의도치 않은 부작용 |
+| **보안 제약** | Java 9+ 모듈 시스템에서 `opens` 선언 없이 리플렉션 접근 시 `InaccessibleObjectException` |
+
+### 💬 면접 답변 형태로 읽기
+
+리플렉션은 JVM이 클래스를 로드할 때 힙 영역에 생성하는 `Class` 객체를 통해 런타임에 클래스의 필드·메서드·생성자·어노테이션 정보를 동적으로 조회하고 조작할 수 있게 해주는 Java API입니다. 컴파일 시점에는 어떤 클래스가 사용될지 알 수 없는 프레임워크 레이어에서 특히 유용합니다. 예를 들어 Spring의 `@Autowired` 필드 주입은 `field.setAccessible(true)` 후 `field.set(bean, dependency)`로 `private` 필드에도 직접 의존성을 주입하고, JPA는 엔티티의 기본 생성자로 인스턴스를 만든 뒤 리플렉션으로 `private` 필드에 DB 조회 값을 설정합니다. Jackson의 JSON 역직렬화도 리플렉션으로 `@JsonProperty`를 읽어 필드를 매핑합니다. 단점은 세 가지입니다. 첫째로 성능 문제입니다. JVM이 일반 메서드 호출에 적용하는 인라이닝·JIT 최적화가 리플렉션에는 적용되지 않아 호출 비용이 높습니다. 그래서 Spring은 리플렉션으로 메서드 정보를 조회하되 결과를 캐싱하고, 실제 호출은 최대한 리플렉션을 피하는 방향으로 최적화합니다. 둘째로 컴파일 타임 타입 안전성이 없어 클래스명이나 메서드명 오타가 런타임에 `ClassNotFoundException`이나 `NoSuchMethodException`으로 나타납니다. 셋째로 `setAccessible(true)`로 `private` 멤버에 접근할 수 있어 캡슐화 원칙이 깨질 수 있습니다. Java 9부터는 모듈 시스템이 도입되어 `module-info.java`에 `opens` 선언 없이 외부 모듈에서 리플렉션으로 접근하면 `InaccessibleObjectException`이 발생하도록 제한이 강화되었습니다.
+
+> 출처: https://hudi.blog/java-reflection/
+> 출처: https://f-lab.ai/en/insight/understanding-java-reflection
+
+---
+
+## Java Dynamic Proxy — JDK Proxy vs CGLIB (독립 개념)
+
+> Spring AOP 맥락의 프록시 비교는 [[topics/java/concepts#Spring AOP 실제 구현 원리]] 참고.
+> 여기서는 두 프록시 메커니즘 자체를 독립적으로 설명한다.
+
+### JDK Dynamic Proxy
+
+`java.lang.reflect.Proxy`와 `InvocationHandler` 인터페이스로 구현되는 **인터페이스 기반 런타임 프록시**.
+
+```
+[클라이언트] → [Proxy 인스턴스 (인터페이스 구현체)]
+                         ↓ 모든 메서드 호출
+               [InvocationHandler.invoke(proxy, method, args)]
+                         ↓ 공통 로직 처리 후
+               [실제 대상 객체 메서드 호출]
+```
+
+**생성 방법:**
+```java
+MyInterface proxy = (MyInterface) Proxy.newProxyInstance(
+    target.getClass().getClassLoader(),   // ClassLoader
+    new Class[]{MyInterface.class},        // 구현할 인터페이스 목록
+    (p, method, args) -> {                 // InvocationHandler (람다)
+        System.out.println("Before: " + method.getName());
+        Object result = method.invoke(target, args);  // 실제 호출 (리플렉션)
+        System.out.println("After: " + method.getName());
+        return result;
+    }
+);
+```
+
+**핵심 제약:** 대상 클래스가 반드시 **인터페이스를 구현**해야 한다. 인터페이스 없는 구체 클래스는 프록시 불가.
+
+**내부 동작:** `Proxy.newProxyInstance()`가 런타임에 바이트코드를 생성해 지정된 인터페이스를 구현하는 프록시 클래스를 만들고, 모든 메서드 호출을 `InvocationHandler.invoke()`로 위임한다. 메서드 실행 시 내부적으로 리플렉션(`method.invoke()`)을 사용한다.
+
+### CGLIB (Code Generation Library)
+
+**바이트코드 조작으로 대상 클래스를 상속하는 서브클래스를 동적으로 생성**하는 프록시.
+
+```
+[원본 클래스 Foo]
+       ↑ 상속
+[CGLIB 생성 프록시 Foo$$EnhancerByCGLIB$$xxx]
+       ↓ 메서드 오버라이드 → MethodInterceptor.intercept() 호출
+```
+
+**핵심 제약:** `final` 클래스나 `final` 메서드는 상속/오버라이드 불가 → 프록시 적용 불가.
+
+**Enhancer + MethodInterceptor:**
+```java
+Enhancer enhancer = new Enhancer();
+enhancer.setSuperclass(Foo.class);
+enhancer.setCallback((MethodInterceptor) (obj, method, args, proxy) -> {
+    System.out.println("Before: " + method.getName());
+    Object result = proxy.invokeSuper(obj, args);  // 부모 클래스 메서드 직접 호출
+    System.out.println("After: " + method.getName());
+    return result;
+});
+Foo proxy = (Foo) enhancer.create();
+```
+
+`proxy.invokeSuper()`는 리플렉션 없이 직접 부모 클래스 메서드를 호출하므로 JDK Proxy보다 런타임 성능이 빠르다.
+
+### 비교표
+
+| 항목 | JDK Dynamic Proxy | CGLIB |
+|---|---|---|
+| 생성 방식 | 인터페이스 구현 (런타임 바이트코드 생성) | 대상 클래스 **상속** (바이트코드 조작) |
+| 필요 조건 | **인터페이스 필수** | 인터페이스 불필요 |
+| 핸들러 | `InvocationHandler.invoke()` | `MethodInterceptor.intercept()` |
+| 메서드 호출 | 리플렉션 (`method.invoke()`) | `proxy.invokeSuper()` (직접 호출) |
+| 성능 | 상대적으로 느림 | 상대적으로 빠름 |
+| `final` 제약 | `final` 클래스/메서드 가능 (인터페이스 기반) | `final` 클래스/메서드 **불가** |
+| Spring Boot 기본 | ❌ | ✅ (2.x부터 기본값) |
+| 의존성 | JDK 내장 | 외부 라이브러리 (`spring-core`에 포함) |
+
+### Spring이 CGLIB을 기본으로 선택한 이유
+
+Spring Boot 1.x까지는 인터페이스가 있으면 JDK Proxy, 없으면 CGLIB를 자동 선택했다. 2.x부터 `proxyTargetClass=true`를 기본값으로 바꿔 항상 CGLIB를 사용하도록 변경되었다.
+
+이유: 인터페이스 없이 `@Service`만 붙인 클래스가 많은 실무에서 JDK Proxy는 적용 불가 케이스가 빈번했고, CGLIB가 더 예측 가능한 동작을 제공하기 때문이다.
+
+### 💬 면접 답변 형태로 읽기
+
+JDK Dynamic Proxy와 CGLIB는 모두 런타임에 프록시 객체를 동적으로 생성하는 방식이지만, 생성 메커니즘이 근본적으로 다릅니다. JDK Dynamic Proxy는 `java.lang.reflect.Proxy`와 `InvocationHandler`를 사용해 인터페이스를 구현하는 프록시 클래스를 런타임에 생성합니다. 모든 메서드 호출은 `InvocationHandler.invoke()`로 위임되고, 내부적으로 리플렉션을 통해 실제 메서드를 실행합니다. 인터페이스 기반이므로 대상 클래스가 반드시 인터페이스를 구현해야 한다는 제약이 있습니다. CGLIB는 ASM 바이트코드 라이브러리를 사용해 대상 클래스를 상속하는 서브클래스를 동적으로 생성합니다. `MethodInterceptor.intercept()`로 메서드를 가로채고, `proxy.invokeSuper()`로 부모 메서드를 직접 호출하기 때문에 리플렉션 오버헤드가 없어 JDK Proxy보다 런타임 성능이 빠릅니다. 다만 상속 방식이므로 `final` 클래스나 `final` 메서드는 오버라이드할 수 없어 프록시 적용이 불가합니다. Spring Boot 2.x부터는 `proxyTargetClass=true`가 기본값이 되어 인터페이스 유무에 관계없이 CGLIB를 사용합니다. 실무에서 `@Service`, `@Component`만 붙인 클래스처럼 인터페이스가 없는 경우가 많아 JDK Proxy 기반 설정에서는 AOP가 적용되지 않는 문제가 빈번했기 때문입니다. 이 구조를 이해하면 `@Transactional`이 `final` 메서드에서 동작하지 않는 이유, self-invocation에서 AOP가 우회되는 이유도 자연스럽게 설명할 수 있습니다.
+
+> 출처: https://medium.com/@JanessaTech/java-dynamic-proxy-jdk-and-cglib-26dbdcab0bf0
+> 출처: https://www.kapresoft.com/java/2023/12/28/java-proxy-vs-cglib.html
+> 출처: https://www.baeldung.com/java-dynamic-proxies

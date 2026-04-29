@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-28
+updated: 2026-04-29
 ---
 
 # 현재 준비 상태 스냅샷
@@ -34,35 +34,37 @@ updated: 2026-04-28
 | golang/error-handling | ★★★★☆ | 2026-04-10 | gin 구문 `c.JSON(http.StatusXxx, gin.H{"error":"..."})` 반복 오류 — 구문 암기 최우선 |
 | golang/clean-architecture | ★★★★☆ | 2026-03-31 | 레이어별 에러 변환 흐름 정착 |
 | golang/hexagonal | ★★★★★ | 2026-04-12 | In-Memory=stateful, Adapter→Port 방향, DIP 전부 교정 완료 |
-| mongodb | ★★★★☆ | 2026-04-02 | Aggregation Pipeline 구조적 추론 가능. `$group` 문법(`$sum: 1`) + `$match` 앞 배치 이유 보완 필요 |
-| python-fastapi | ★★★☆☆ | 2026-04-28 | yield setup/teardown 구분 가능. 요청 스코프 격리 메커니즘 미답변(5/10) — "매 요청마다 새 인스턴스 생성" 표현 암기 필요 |
+| mongodb | ★★★☆☆ | 2026-04-29 | $match/group/sort/limit 역할 파악. $group 문법(`_id: "$field"`, `$sum: 1`, `$` 접두사) + $project 역할(SELECT 절) 아직 미암기(5/10) |
+| python-fastapi | ★★★★☆ | 2026-04-29 | yield setup/teardown + 요청 스코프 격리 메커니즘 8/10 해결 ✅. "각 요청이 독립된 인스턴스 → 세션 오염 없음 = 요청 스코프" 결론 표현 추가 필요 |
 | java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
 | networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
-| mysql | ★★★★☆ | 2026-04-21 | 복합 인덱스 원칙·커버링 인덱스 정확. 지연 조인(Deferred Join) SQL 패턴 미답변 — SELECT * 상황에서 서브쿼리+PK JOIN 패턴 암기 필요. 커서 기반 페이지네이션 미언급 |
+| mysql | ★★★★☆ | 2026-04-29 | 지연 조인(Deferred Join) 7/10 — PK 서브쿼리+JOIN 패턴 파악. "커버링 인덱스로 처리" 표현 아직 미언급. 커서 기반 단점(임의 점프 불가) 정확. |
 | redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
 | kafka | ★★★★★ | 2026-04-28 | Exactly-Once 10/10 — PID+Sequence/transactional.id/isolation.level/Outbox+Inbox 전 레이어 완벽 설명 ✅ |
 | rabbitmq | ★★★★☆ | 2026-04-28 | DLQ 3조건(TTL/NACK+requeue=false/x-max-length) + x-dead-letter-exchange 속성명 + x-death 헤더(count/reason/queue/exchange) 4회 연속 블로킹 드디어 해결 ✅ |
 | kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
-| kubernetes | ★★★☆☆ | 2026-04-28 | StatefulSet 개념·이유 파악, volumeClaimTemplates Pod별 독립 PVC 자동생성 여전히 모름(5/10). Istio Canary 7/10(L7 vs L4, replica vs weight 독립성 추가 필요) |
+| kubernetes | ★★★★☆ | 2026-04-29 | volumeClaimTemplates 8/10 ✅. HPA 6/10 — stabilizationWindowSeconds(기본 5분) vs PDB(minAvailable/maxUnavailable) 혼동. desiredReplicas 계산 공식 미언급 |
 | zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
 | distributed-systems | ★★★☆☆ | 2026-04-12 | 2PC 전혀 모름 — Phase 1/2 흐름, Blocking 원인, 3PC 차이 암기 필요. Saga 선택 이유 방향은 알고 있음 |
 | elasticsearch | ★★★★☆ | 2026-04-28 | Analyzer 3단계 7/10 해결. Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 추가 암기 필요 |
 | postgresql | ★★★☆☆ | 2026-04-28 | MVCC/Dead Tuple/VACUUM 6/10. XID Wraparound(32비트 트랜잭션 ID 한계, 쓰기 전면 차단) 개념 인지. xmin/xmax 내부 구조 추가 학습 필요 |
-| java/spring | ★★★★★ | 2026-04-02 | AOP 3문제 복습 완료. 횡단 관심사·JoinPoint/Pointcut·self-invocation 모두 교정됨 |
+| java/spring | ★★★★★ | 2026-04-29 | AOP/프록시/Reflection 개념 완전 정리. JDK Dynamic Proxy vs CGLIB 메커니즘, Reflection 동작 원리(Class 객체·힙), @Retention RUNTIME, JPA 기본 생성자 이유까지 연결 완료 |
 
 ---
 
 ## 다음 우선순위
 
-1. `java/WebSocket+STOMP` — @SendTo(브로드캐스트) vs @SendToUser(1:1) vs SimpMessagingTemplate(서버 능동 push) 역할 구분 (5/10, @SendTo 역할 오해로 꼬리 "모르겠습니다")
-2. `kubernetes/StatefulSet` — volumeClaimTemplates Pod별 독립 PVC 자동생성(kafka-0→data-kafka-0) 동작 암기 (5/10, 꼬리 "모르겠습니다")
-3. `python-fastapi/Depends` — "매 요청마다 새 인스턴스 생성 → 요청 스코프" 표현 암기. Spring 싱글톤 vs FastAPI 요청 스코프 차이 (5/10)
-4. `elasticsearch` — Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 상세 암기
-5. `postgresql` — xmin/xmax 내부 구조, XID Wraparound freeze 동작 상세
-6. `ai-stt/Hallucination` — Temperature·Chain-of-Thought·Re-ranking 3가지 미언급. 이력서(STT→RAG) 연결 훈련 필요
-7. `mysql/oracle` — Oracle vs MySQL 4가지 차이 암기: 페이징(ROWNUM vs LIMIT), NULL(`''`=NULL vs 구분), 시퀀스 vs AUTO_INCREMENT, 기본 격리수준(READ COMMITTED vs REPEATABLE READ)
-8. `golang/memory` — GC Tricolor White/Gray/Black 정의 재복습
-9. `distributed-systems` — 멱등키 구현 패턴(Idempotency-Key + Redis TTL) 코드 수준 암기
+1. `java/ConcurrentHashMap` — 버킷=배열 슬롯 표현 정착, $sum: 1 카운트 구분 (복습 6/10, 버킷 오류 있음)
+2. `mongodb` — $sum: 1(카운트) vs $sum: "$field"(합산) 구분, _id: "$category" 형태 (5/10 → 재복습 필요)
+3. `kubernetes/HPA` — stabilizationWindowSeconds "가장 높은 값 선택" 표현 정착 + desiredReplicas 공식 암기 (6/10)
+4. `ai-stt` — Re-ranking Cross-encoder 재평가 개념, Hallucination 발생 조건 구체화 (6/10)
+5. `mysql` — 지연 조인에서 "커버링 인덱스로 처리" 표현 추가 (7/10에서 미언급)
+6. `java/STOMP` — 이력서(카테노이드 채팅 서버) 연결 연습. 내용은 9/10 해결 ✅
+7. `elasticsearch` — Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 상세 암기
+8. `postgresql` — xmin/xmax 내부 구조, XID Wraparound freeze 동작 상세
+9. `ai-stt/Hallucination` — Temperature·Chain-of-Thought·Re-ranking 3가지 미언급. 이력서(STT→RAG) 연결 훈련 필요
+10. `java/Reflection+Proxy` — 오늘 학습 완료. AOP 답변에서 Weaving·Pointcut 용어 자연스럽게 연결 연습 필요
+11. `distributed-systems` — 멱등키 구현 패턴(Idempotency-Key + Redis TTL) 코드 수준 암기
 
 ---
 

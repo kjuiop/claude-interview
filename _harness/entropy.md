@@ -1,6 +1,6 @@
 ---
 type: harness-entropy
-updated: 2026-04-28
+updated: 2026-04-29
 ---
 
 # 엔트로피 추적 (Entropy Management)
@@ -29,7 +29,7 @@ updated: 2026-04-28
 | redis | `topics/redis/concepts.md` | 🟡 중간 | Redis 장애 fallback(Sentinel/Cluster, degraded mode) 면접 세션에서 누락 확인 — 정리 필요 |
 | rabbitmq | `topics/rabbitmq/concepts.md` | 🟡 중간 | 공고 언급 |
 | rabbitmq | `topics/rabbitmq/questions.md` | 🟡 중간 | 공고 언급 |
-| java | `topics/java/concepts.md` | 🟡 중간 | 공고 요구사항 |
+| java | `topics/java/concepts.md` | ✅ 해결 | 2026-04-29 Reflection·JDK Proxy·CGLIB·JPA 기본 생성자 섹션 추가 완료 |
 | elasticsearch | `topics/elasticsearch/concepts.md` | 🟡 중간 | 공고 언급 |
 
 ---
@@ -65,6 +65,8 @@ updated: 2026-04-28
 | 2026-04-28 | 3회차 | K8s volumeClaimTemplates — Pod별 독립 PVC 자동생성 동작 꼬리 "모르겠습니다"(5/10) | kubernetes/questions.md StatefulSet 섹션 보완. data-kafka-0/data-kafka-1 패턴 암기 필요 |
 | 2026-04-28 | 4회차 | FastAPI Depends() — 요청 스코프 격리 메커니즘 꼬리 "모르겠습니다"(5/10) | "매 요청마다 새 인스턴스 생성 → 요청 스코프" 표현 암기 필요 |
 | 2026-04-28 | 1회차 | PostgreSQL XID Wraparound — autovacuum 실패의 치명적 위험 미언급(6/10) | 32비트 XID 한계, freeze 동작, 쓰기 전면 차단 → 모범 답변에 포함됨 |
+| 2026-04-29 | 학습 세션 | Java Reflection·Dynamic Proxy 개념 전혀 모름 → 오늘 topics/java/ 에 완전 정리 | JDK Proxy InvocationHandler, CGLIB Enhancer/MethodInterceptor, @Retention RUNTIME, JPA 기본 생성자 이유까지 연결 |
+| 2026-04-29 | 1회차 | MySQL 지연 조인 "커버링 인덱스로 처리" 표현 미언급(7/10) | 다음 복습 시 "PK 서브쿼리는 커버링 인덱스로 처리되어 디스크 I/O 없음" 한 문장 추가 연습 필요 |
 
 ---
 

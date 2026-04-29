@@ -115,6 +115,21 @@ db.messages.aggregate([
   - `$match` 앞 배치 이유 언급: 인덱스 활용으로 처리 문서 수 최소화 → 성능 핵심
   - "직접 경험 없지만 SQL 지식으로 추론" 선언 먼저 → 면접관 신뢰 확보
 
+**면접 세션 피드백 (2026-04-29 1회차)**:
+- 잘한 점: $match/group/sort/limit 역할 정확. $match 앞 배치 이유(데이터 줄여 이후 연산 비용 감소) 정확.
+- 보완:
+  - **$group 문법 미암기**: `{ $group: { _id: "$category", count: { $sum: 1 } } }`. 필드 참조 시 `$` 접두사 필수. `$sum: 1`이 row 하나당 1씩 카운트.
+  - **$project 역할 미암기**: SQL SELECT 절과 동일. `{ $project: { name: 1, _id: 0 } }`처럼 필드 선택(1)/제외(0). 새 필드 계산도 가능.
+- 점수: 5/10 ($project 모름, $group 문법 상세 미암기)
+
+**면접 세션 피드백 (2026-04-29 5회차 복습)**:
+- 5개 스테이지 SQL 매핑 정확, $project = SELECT ✅. $group 방향 맞음.
+- 보완:
+  - **$sum: 1 vs $sum: "$field" 구분**: 카운트 = `$sum: 1`, 필드 합산 = `$sum: "$amount"`. 혼동 주의.
+  - **_id 키**: `_$id` 아님 → `_id`. 필드 참조: `_id: "$category"`
+- 반드시 암기: `{ $group: { _id: "$category", count: { $sum: 1 }, avg: { $avg: "$price" } } }`
+- 점수: 7/10
+
 ---
 
 ## 인덱스 전략

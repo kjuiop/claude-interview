@@ -43,6 +43,11 @@ related: [kubernetes/concepts]
 - 보완: volumeClaimTemplates → Pod마다 독립 PVC 자동 생성(`data-kafka-0`, `data-kafka-1`), Pod 재시작 시 동일 PVC 재바인딩으로 데이터 보존. 이 동작을 정확히 설명해야 함.
 - 점수: 5/10 (volumeClaimTemplates 꼬리 질문 "모르겠습니다")
 
+**면접 세션 피드백 (2026-04-29 1회차)**:
+- 잘한 점: Pod별 독립 PVC 자동 생성, `data-kafka-1` 네이밍 패턴 정확, Deployment와의 차이(익명 Pod/공유 볼륨) 모두 파악. 어제 5/10 → 오늘 8/10.
+- 보완: 재연결 이유 한 문장 추가 필요 — "Pod 이름 고정 → PVC 이름(`{template.name}-{pod-name}`) 고정 → 재시작 시 자동 재마운트"
+- 점수: 8/10
+
 ---
 
 ## Kubernetes에서 서비스 무중단 배포를 보장하기 위해 어떤 전략을 사용했나요? HPA는 어떤 기준으로 설정하나요?
@@ -358,3 +363,30 @@ VirtualService: 라우팅 규칙 (두 가지 독립 매칭)
 - 점수: 7/10
 
 ---
+
+## HPA stabilizationWindowSeconds vs PDB
+
+### Q. Kubernetes HPA가 스케일다운할 때 급격한 축소를 방지하는 메커니즘을 설명하고, `stabilizationWindowSeconds`와 `PodDisruptionBudget`의 차이를 설명해주세요.
+
+**난이도:** 기초
+
+**핵심 키워드:** stabilizationWindowSeconds, 300초(5분), 가장 높은 replica 수 선택, flapping 방지, PDB, minAvailable, maxUnavailable, Voluntary Disruption
+
+**모범 답변:**
+
+`stabilizationWindowSeconds`는 HPA 스케일다운 시 급격한 축소를 방지하는 메커니즘입니다. 기본값은 300초(5분)이며, 이 시간 동안 HPA 컨트롤러가 15초마다 계산한 desired replica 수를 모두 기록합니다. 실제 스케일다운 시 기록된 값 중 **가장 높은(보수적인) replica 수**를 목표로 선택합니다. 트래픽이 일시적으로 떨어졌다가 다시 올라오는 상황에서 Pod를 줄였다 늘렸다 하는 flapping을 방지하는 것이 목적입니다. 스케일아웃은 기본값이 0초라 즉각 반응합니다. `spec.behavior.scaleDown.stabilizationWindowSeconds`에서 조정합니다.
+
+`PodDisruptionBudget(PDB)`는 완전히 다른 목적입니다. HPA의 자동 스케일링이 아닌 노드 드레인, 롤링 업데이트 같은 자발적 중단(Voluntary Disruption) 상황에서 서비스 가용성을 보장합니다. `minAvailable`은 항상 유지해야 하는 최소 Pod 수, `maxUnavailable`은 동시에 내릴 수 있는 최대 Pod 수를 지정합니다.
+
+**차이 요약:**
+- `stabilizationWindowSeconds`: **언제** 스케일다운할지 타이밍을 보수적으로 결정
+- `PDB`: **스케일다운/업데이트 시** 최소 몇 개를 살려둘지 강제
+
+**꼬리 질문 예시:**
+- desiredReplicas 계산 공식은?
+- 스케일아웃의 stabilizationWindowSeconds 기본값은?
+
+**면접 세션 피드백 (2026-04-29 3회차 → 5회차 복습)**:
+- 3회차: PDB(minAvailable/maxUnavailable)와 stabilizationWindowSeconds 혼동 → 6/10
+- 5회차: PDB 구분 ✅, "천천히 내린다" 오해 → 꼬리 후 "가장 높은 값 선택" 교정 → 7/10
+- 반드시 암기: stabilizationWindowSeconds = "윈도우 동안 가장 높은 replica 수 선택" (천천히 내리는 게 아님)
