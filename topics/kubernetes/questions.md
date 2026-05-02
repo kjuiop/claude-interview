@@ -390,3 +390,43 @@ VirtualService: 라우팅 규칙 (두 가지 독립 매칭)
 - 3회차: PDB(minAvailable/maxUnavailable)와 stabilizationWindowSeconds 혼동 → 6/10
 - 5회차: PDB 구분 ✅, "천천히 내린다" 오해 → 꼬리 후 "가장 높은 값 선택" 교정 → 7/10
 - 반드시 암기: stabilizationWindowSeconds = "윈도우 동안 가장 높은 replica 수 선택" (천천히 내리는 게 아님)
+
+---
+
+## 배포 전략 — Rolling Update / Blue-Green / Canary
+
+### Q. Kubernetes에서 Rolling Update, Blue-Green, Canary 배포 전략의 차이와 각각 어떤 상황에 적합한지 설명해주세요. ArgoCD를 사용한 실제 배포 파이프라인 구성도 설명해주세요.
+
+**핵심 키워드:** Rolling Update, maxSurge, maxUnavailable, Blue-Green, Canary, ArgoCD GitOps, readiness probe, initialDelaySeconds, failureThreshold, periodSeconds
+
+**전략 비교:**
+
+| 전략 | 방식 | 장점 | 단점 |
+|---|---|---|---|
+| Rolling Update | 기존 Pod 점진적 교체 | 리소스 절약, 무중단 | 구버전·신버전 동시 서비스 |
+| Blue-Green | 두 환경 동시 운영, 순간 전환 | 즉각 롤백, 테스트 후 전환 | 리소스 2배 필요 |
+| Canary | 트래픽 일부만 신버전 | 실제 트래픽으로 검증 | 인프라 설정 복잡 |
+
+**Rolling Update 선택 기준:** 무중단 배포가 목적이고 리소스 여유가 제한적일 때. `maxSurge`(초과 허용 Pod 수), `maxUnavailable`(동시 교체 허용 수) 파라미터로 속도 조절.
+
+**ArgoCD GitOps 패턴:**
+- Git 레포지토리 = Single Source of Truth
+- manifest 변경 → ArgoCD가 cluster 상태와 diff 감지 → 자동 sync
+- kubectl 직접 실행 불필요 → Git 커밋으로 배포 이력 관리, revert로 롤백
+
+**readiness probe 핵심 파라미터:**
+- `initialDelaySeconds`: 첫 검사 시작까지 대기 시간 (Spring Boot 느린 부팅 시 늘려야 함)
+- `periodSeconds`: 검사 주기
+- `failureThreshold`: 연속 실패 허용 횟수 초과 시 Pod Unready 처리
+
+**트러블슈팅 패턴:** Spring Boot 느린 부팅 → readiness probe 실패 → CrashLoopBackOff
+→ `initialDelaySeconds` 늘리기 + `failureThreshold` 늘리기 + CPU request 증가
+
+**꼬리 질문 예시:**
+- Rolling Update 중 readiness probe 실패 시 어떻게 되나요?
+- ArgoCD sync 정책 중 Auto Sync와 Manual Sync 차이는?
+- Canary 배포에서 트래픽 비율 조절을 K8s 기본 기능으로 구현하는 방법은?
+
+**면접 세션 피드백 (2026-05-02 2회차)**:
+- 잘한 점: Rolling Update 메커니즘, 3가지 전략 비교 명확, 트러블슈팅 경험 연결
+- 보완: Rolling Update 선택 이유 미언급, ArgoCD = "kubectl 대신 수행"이 아닌 GitOps 패턴이 핵심, readiness probe 파라미터 암기 필요

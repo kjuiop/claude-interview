@@ -274,3 +274,83 @@ Consumer Rebalancing은 Kafka 운영에서 처리 중단의 주요 원인 중 �
 - KRaft 모드에서 Leader Election 방식은 ZooKeeper 기반과 어떻게 다른가요?
 
 ---
+
+## Kafka Consumer에서 외부 API 호출 시 Rebalancing Storm 방지 패턴
+
+**난이도**: 중급
+
+**핵심 키워드**: max.poll.interval.ms, Rebalancing Storm, DB 중간 저장, 비동기 워커, DLQ, at-least-once, 멱등성
+
+**면접 질문 예시**:
+> Kafka Consumer에서 메시지를 처리할 때 외부 API를 동기로 호출하면 어떤 문제가 생기고, 어떻게 해결하나요?
+
+**핵심 흐름**:
+
+**문제**: Consumer에서 외부 API를 동기 호출 → 처리 100개 × 1초 = 100초 → max.poll.interval.ms 초과 → Rebalancing → 다른 Consumer가 같은 100개 재처리 → 똑같이 100초 걸림 → **Rebalancing Storm**
+
+**해결**: DB를 중간에 끼워 Kafka offset 커밋과 외부 API 호출을 분리
+
+```
+Consumer: 메시지 수신 → DB에 PENDING 상태로 저장 → offset 커밋 (빠름)
+별도 워커: DB에서 PENDING 읽음 → 외부 API 호출
+         → 성공: DONE
+         → 실패: retry_count 증가 (exponential backoff)
+         → 3회 실패: FAILED + 워커가 직접 DLQ 토픽에 발행
+```
+
+**DLQ 주의사항**:
+- Kafka에서는 RabbitMQ DLX처럼 브로커가 자동으로 DLQ로 라우팅하지 않음
+- offset이 이미 커밋됐으므로 **워커가 직접 DLQ 토픽에 명시적으로 발행**해야 함
+- 또는 DB의 별도 dead_letter_queue 테이블로 관리
+
+**DB 상태 컬럼 설계**:
+```sql
+status: PENDING → PROCESSING → DONE / FAILED
+retry_count: 0~3
+next_retry_at: exponential backoff 시각
+error_message: 마지막 실패 원인
+```
+
+**선택 기준**:
+- 외부 API가 반드시 처리되어야 함 (결제, 재고 차감) → DB 중간 저장 패턴
+- 일부 유실 허용 (로그 집계) → 비동기 즉시 ack + 멱등성
+
+**꼬리 질문 예시**:
+- Consumer가 DB 저장 후 offset 커밋 전에 죽으면? → 재시작 시 같은 메시지 재처리 → DB에 PENDING 중복 → unique 제약으로 방어
+- DLQ로 보낸 메시지는 어떻게 재처리? → 원인 수정 후 DLQ Consumer가 원본 토픽으로 재발행 or 수동 처리
+- 파티션 hotspot 발생 시 응급조치는? → 순서 불필요: Consumer 내부 멀티스레딩 / 순서 필요: 파티션 증가(Rebalancing 감수) / 근본: 파티션 키 재설계(user_id 기반)
+
+---
+
+## Rebalancing — max.poll.interval.ms vs session.timeout.ms
+
+### Q. Kafka Consumer에서 max.poll.interval.ms가 초과되어 Rebalancing이 반복될 때 원인과 해결 방법을 설명해주세요. session.timeout.ms와 트리거 주체가 어떻게 다른지도 구분해주세요.
+
+**핵심 키워드:** max.poll.interval.ms, poll() 호출 간격, LeaveGroup 요청, session.timeout.ms, heartbeat thread, Group Coordinator, Eager Rebalancing, Stop-the-World, Cooperative Sticky Rebalancing
+
+**트리거 주체 대조 (핵심):**
+
+| 설정 | 초과 시 동작 | 트리거 주체 |
+|---|---|---|
+| `max.poll.interval.ms` | Consumer가 스스로 **LeaveGroup 요청** 전송 | Consumer (능동) |
+| `session.timeout.ms` | 브로커(Group Coordinator)가 heartbeat 미수신 감지 | Broker (능동) |
+
+- `max.poll.interval.ms`: poll() 호출 간격 최대값. 메시지 처리 로직이 무거워 다음 poll()이 늦어지면 초과. "커밋 타임아웃"이 아님 — 처리 지연 → 커밋 지연이 동반되어 혼동.
+- `session.timeout.ms`: heartbeat thread가 보내는 heartbeat의 응답 타임아웃. Consumer가 죽었는지 감지용.
+
+**Eager Rebalancing STW:**
+- 리밸런싱 시작 → 모든 Consumer가 파티션 전부 반납 → Group Coordinator가 전체 재배분
+- 완료까지 그룹 전체 메시지 처리 중단 (Stop-the-World)
+
+**Cooperative Sticky Rebalancing 개선:**
+- 1단계: 재할당 필요한 파티션만 선별 반납, 나머지는 계속 처리
+- 2단계: 반납된 파티션만 재배분
+- 전체 중단 없이 일부만 일시 중단 → downtime 최소화
+
+**꼬리 질문 예시:**
+- max.poll.interval.ms를 늘리는 것이 항상 옳은 해결책인가요? → 아님. 처리 로직 비동기화 or chunk 크기 조정이 근본 해결
+- Cooperative Rebalancing 적용 방법은? → `partition.assignment.strategy=CooperativeStickyAssignor`
+
+**면접 세션 피드백 (2026-05-02 2회차)**:
+- 잘한 점: poll 간격 제한 개념 정확, session.timeout.ms heartbeat 구분, STW와 Cooperative 개선 방향 파악
+- 보완: **LeaveGroup 요청** 키워드 필수 암기. 트리거 주체(Consumer vs Broker) 대조 표현 추가.

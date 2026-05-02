@@ -67,6 +67,10 @@ updated: 2026-04-29
 | 2026-04-28 | 1회차 | PostgreSQL XID Wraparound — autovacuum 실패의 치명적 위험 미언급(6/10) | 32비트 XID 한계, freeze 동작, 쓰기 전면 차단 → 모범 답변에 포함됨 |
 | 2026-04-29 | 학습 세션 | Java Reflection·Dynamic Proxy 개념 전혀 모름 → 오늘 topics/java/ 에 완전 정리 | JDK Proxy InvocationHandler, CGLIB Enhancer/MethodInterceptor, @Retention RUNTIME, JPA 기본 생성자 이유까지 연결 |
 | 2026-04-29 | 1회차 | MySQL 지연 조인 "커버링 인덱스로 처리" 표현 미언급(7/10) | 다음 복습 시 "PK 서브쿼리는 커버링 인덱스로 처리되어 디스크 I/O 없음" 한 문장 추가 연습 필요 |
+| 2026-05-02 | 2회차 | ArgoCD "오케스트레이션 도구"로 표현 — 핵심 GitOps 개념 미사용(7/10) | "Git=SSOT, manifest 변경→diff 감지→자동 sync" 패턴 한 문장 암기. kubernetes/questions.md 보완 완료 |
+| 2026-05-02 | 2회차 | K8s readiness probe 파라미터 — failureThreshold·periodSeconds 미암기("모르겠습니다") | `initialDelaySeconds`+`periodSeconds`+`failureThreshold` 3개 세트 암기 필수 |
+| 2026-05-02 | 2회차 | Kafka Rebalancing — LeaveGroup 키워드 미사용, 트리거 주체 대조 미언급(7/10) | max.poll.interval.ms → Consumer 스스로 LeaveGroup 전송. session.timeout.ms → 브로커(Group Coordinator)가 감지. 능동/수동 대조 표현 암기 |
+| 2026-05-02 | 4회차 | ClickHouse ORDER BY Primary Key — sparse index(granule + primary.idx) 개념 미언급(7/10) | "granule 8192행 단위 저장 → 각 granule 첫 번째 행 값을 primary.idx에 기록 → 이진탐색으로 granule 스킵" 흐름 암기 |
 
 ---
 

@@ -283,6 +283,52 @@ Spring IoC(Inversion of Control) 컨테이너는 객체의 생성, 의존성 주
 
 ---
 
+## 프록시, 동적 프록시, Spring Data JPA Repository의 관계를 연결해서 설명해주세요.
+
+**난이도**: 중급
+
+**핵심 키워드**: 동적 프록시, JDK Dynamic Proxy, InvocationHandler, CGLIB, JpaRepository 인터페이스, 메서드명 분석, JPQL 생성, 리플렉션
+
+**모범 답변 (800자 이상)**:
+> 프록시는 실제 객체 대신 앞에 서서 호출을 가로채는 대리 객체입니다. 클라이언트는 프록시를 실제 객체로 알고 호출하지만, 프록시는 그 호출을 가로채 공통 처리를 수행한 뒤 실제 객체에 위임합니다. 이 구조 덕분에 트랜잭션, 로깅, 캐시 같은 횡단 관심사를 비즈니스 로직에서 완전히 분리할 수 있습니다.
+>
+> 동적 프록시는 컴파일 시점이 아닌 런타임에 프록시 객체를 동적으로 생성하는 방식입니다. Java에는 두 가지 방식이 있습니다. JDK Dynamic Proxy는 `java.lang.reflect.Proxy`와 `InvocationHandler`를 사용해 인터페이스를 구현하는 프록시 클래스를 런타임에 생성합니다. 모든 메서드 호출이 `InvocationHandler.invoke()`로 위임되며, 내부적으로 리플렉션으로 실제 메서드를 실행합니다. 반드시 인터페이스가 있어야 한다는 제약이 있습니다. CGLIB는 대상 클래스를 상속한 서브클래스를 바이트코드 조작으로 생성하는 방식으로, 인터페이스 없이도 프록시를 만들 수 있습니다. Spring Boot 2.x부터는 인터페이스 유무와 무관하게 CGLIB를 기본으로 사용합니다.
+>
+> Spring Data JPA의 Repository가 이 동적 프록시의 가장 직관적인 사례입니다. 개발자는 `OrderRepository extends JpaRepository<Order, Long>`처럼 인터페이스만 선언하고 구현 클래스를 작성하지 않습니다. 그런데 실제로 `orderRepository.findById(1L)`을 호출하면 SQL이 실행됩니다. 이것이 가능한 이유는 Spring이 애플리케이션 시작 시 JDK Dynamic Proxy로 `OrderRepository` 인터페이스를 구현하는 프록시 객체를 런타임에 생성해 Bean으로 등록하기 때문입니다. `@Autowired`로 주입받는 `orderRepository`는 실제로 이 프록시 인스턴스입니다. 메서드를 호출하면 프록시 안의 `InvocationHandler`가 가로채 메서드 이름을 분석합니다. `findByUserId`이면 `WHERE user_id = ?` 조건의 JPQL을 생성하고, `save`이면 `persist` 또는 `merge`를 호출하는 방식으로 Hibernate에 위임합니다. 개발자가 인터페이스만 선언했는데 DB가 조회되는 "마법"의 실체는 동적 프록시와 리플렉션입니다.
+>
+> `@Transactional`도 같은 맥락입니다. Repository 메서드 호출 시 CGLIB 프록시가 먼저 트랜잭션을 시작하고, 내부에서 JDK Proxy 기반 Repository가 실제 SQL을 실행한 뒤, 다시 CGLIB 프록시가 커밋 또는 롤백을 처리합니다. 결국 Spring Boot 애플리케이션에서 Repository를 호출하는 단순한 한 줄 코드 뒤에는 CGLIB 프록시와 JDK 동적 프록시, 리플렉션, JPQL 파싱이 모두 맞물려 동작하고 있습니다.
+
+**꼬리 질문 예시**:
+- Spring Data JPA에서 인터페이스만 선언해도 동작하는 이유는?
+- `findByUserId`처럼 메서드 이름으로 쿼리가 생성되는 원리는?
+- Repository에 `@Transactional`을 붙이지 않아도 저장이 되는 이유는?
+
+---
+
+## Spring Boot의 핵심 동작 원리 — IoC/DI, 프록시, 싱글톤을 연결해서 설명해주세요.
+
+**난이도**: 기초
+
+**핵심 키워드**: IoC 컨테이너, DI 생성자 주입, CGLIB 프록시, 싱글톤 스코프, 무상태 설계, race condition, AOP
+
+**모범 답변 (800자 이상)**:
+> Spring Boot의 핵심 동작 원리는 IoC/DI, 프록시, 싱글톤 세 가지 축으로 설명할 수 있습니다.
+>
+> 먼저 IoC(Inversion of Control)는 객체의 생성과 의존성 연결에 대한 제어권을 개발자가 아닌 Spring 컨테이너가 가져간다는 개념입니다. 전통적인 방식에서는 개발자가 `new OrderService(new OrderRepository())`처럼 직접 객체를 생성하고 의존성을 연결했지만, Spring에서는 컨테이너가 애플리케이션 시작 시 Bean을 생성하고 필요한 의존성을 자동으로 주입해줍니다. 이것이 DI(Dependency Injection)입니다. 생성자 주입 방식이 권장되는 이유는 테스트 시 Mock 객체 주입이 쉽고, `final` 필드 선언으로 불변성을 보장할 수 있기 때문입니다. 실무에서 `@Service` 클래스에 생성자 하나만 선언해도 의존성이 주입되는 것이 이 원리로 동작합니다.
+>
+> 두 번째로 프록시입니다. Spring은 `@Transactional`, `@Cacheable` 같은 어노테이션이 붙은 Bean을 등록할 때 실제 객체 대신 CGLIB 프록시 객체를 생성해 주입합니다. 메서드를 호출하면 프록시가 먼저 가로채 트랜잭션 시작이나 캐시 확인 같은 공통 처리를 수행한 뒤 실제 메서드를 실행합니다. 이것이 AOP의 구현 방식이며, `@Transactional`이 같은 클래스 내 self-invocation에서 동작하지 않는 이유도 이 프록시 구조에서 비롯됩니다. 내부 호출은 프록시를 거치지 않고 실제 객체를 직접 호출하기 때문입니다. 실무에서 Saga 코레오그래피 패턴을 구현할 때 각 플로우 메서드마다 로깅 코드를 중복 작성하는 대신, `@Around`와 커스텀 어노테이션으로 AOP를 구성해 Aspect 한 곳에서 모든 단계의 로깅을 관리한 경험이 있습니다.
+>
+> 세 번째로 싱글톤입니다. Spring 컨테이너에 등록된 Bean은 기본적으로 싱글톤 스코프로 관리됩니다. 컨테이너당 인스턴스가 하나만 존재하고 모든 요청이 같은 객체를 공유합니다. 덕분에 객체 생성 비용이 줄고 메모리가 절약됩니다. 단, 싱글톤 Bean에 가변 상태를 저장하면 여러 스레드가 동시에 같은 인스턴스를 수정하는 race condition이 발생합니다. 예를 들어 `@Service` 클래스에 인스턴스 변수로 사용자 정보를 저장하면 요청 A의 데이터가 요청 B에 노출될 수 있습니다. 그래서 Bean은 무상태(stateless)로 설계하고 상태는 메서드 파라미터나 ThreadLocal로 관리해야 합니다.
+>
+> 이 세 가지는 독립된 개념이 아니라 서로 맞물려 동작합니다. IoC 컨테이너가 싱글톤 Bean을 생성하고, 필요한 경우 프록시로 감싸 AOP 기능을 제공하는 구조가 Spring Boot 애플리케이션의 근간입니다.
+
+**꼬리 질문 예시**:
+- 싱글톤 Bean에 인스턴스 변수를 두면 어떤 문제가 생기나요?
+- `@Transactional`이 같은 클래스 내부 호출에서 동작하지 않는 이유는?
+- 생성자 주입이 필드 주입보다 권장되는 이유는?
+
+---
+
 ## JPA 엔티티에 기본 생성자가 필요한 이유는 무엇인가요?
 
 **난이도**: 기초
@@ -541,3 +587,222 @@ WebSocket은 HTTP 핸드셰이크를 통해 한 번 연결이 수립되면 클�
 - 5회차: 전체 lock vs CAS·선택 기준 파악. "버킷=8비트" 오류 → 버킷=**배열 슬롯** 교정. 읽기 lock 없음 ✅. 6/10
 - 반드시 암기: 버킷 = 배열 인덱스(슬롯), Java 8 이후 버킷 헤드 Node에 synchronized + 빈 버킷은 CAS
 - 점수: 5/10 (@SendTo 역할 오류로 꼬리 질문 "모르겠습니다")
+
+## Spring Batch
+
+### Q. Spring Batch의 구조를 설명해주세요. Job, Step, ItemReader, ItemProcessor, ItemWriter의 역할과 chunk-size가 트랜잭션에 미치는 영향을 설명해주세요.
+
+**난이도**: 기초
+
+**핵심 키워드**: Job, Step, ItemReader, ItemProcessor, ItemWriter, Chunk-Oriented Processing, chunk-size, 트랜잭션, JobRepository, Restart
+
+**모범 답변 (말하기 형태)**:
+> Spring Batch는 대용량 데이터를 반복 처리하는 배치 작업 프레임워크입니다. Job이 가장 큰 단위이고, Job 안에 여러 Step이 순서대로 실행됩니다. 각 Step은 Chunk-Oriented Processing으로 동작합니다. ItemReader가 데이터를 chunk-size만큼 읽고 → ItemProcessor가 변환/필터링 → ItemWriter가 chunk-size 단위로 한 번에 씁니다.
+>
+> chunk-size는 트랜잭션 단위와 직결됩니다. chunk-size=100이면 100개 처리 후 커밋, 50번째 실패 시 100개 전체 롤백. 크면 성능 좋지만 재처리 범위 큼. 작으면 안전하지만 트랜잭션 오버헤드 증가.
+>
+> JobRepository가 실행 상태를 DB에 저장하므로 실패 시 성공한 Step부터 재시작(Restart) 가능합니다.
+
+**구조 요약**:
+```
+Job
+└── Step 1 (Chunk-Oriented)
+│     ItemReader → ItemProcessor → ItemWriter
+│     [chunk-size 단위로 트랜잭션 커밋]
+└── Step 2
+└── Step 3
+
+JobRepository: 실행 상태 DB 저장 → Restart 지원
+```
+
+**꼬리 질문 예시**:
+- chunk-size를 크게 하면 어떤 장단점이 있나요?
+- ItemProcessor에서 null을 반환하면 어떻게 되나요? → 해당 아이템을 ItemWriter에 전달하지 않고 스킵
+- Spring Batch에서 실패한 배치를 이어서 재실행하려면 어떻게 하나요? → JobRepository의 실행 상태 기반 Restart
+
+---
+
+## Spring Batch faultTolerant
+
+### Q. Spring Batch에서 `faultTolerant()`를 사용할 때 `skip`과 `retry`를 각각 어떤 예외 상황에 적용하나요?
+
+**난이도**: 중급
+
+**핵심 키워드**: faultTolerant, skip, retry, skipLimit, retryLimit, DataIntegrityViolationException, TransientDataAccessException, chunk 트랜잭션 단위, 재처리 범위
+
+**모범 답변 (말하기 형태)**:
+> faultTolerant()를 사용할 때 skip과 retry는 예외의 성격으로 구분합니다. skip은 재시도해도 성공할 수 없는 영구적 오류에 사용합니다. DataIntegrityViolationException처럼 데이터 자체에 문제가 있으면 아무리 재시도해도 같은 오류가 발생합니다. `faultTolerant().skip(DataIntegrityViolationException.class).skipLimit(10)`처럼 설정하면 해당 아이템을 건너뛰고 다음을 처리합니다. skipLimit 초과 시 Step 전체 실패입니다.
+>
+> retry는 일시적 오류에 사용합니다. `retry(TransientDataAccessException.class).retryLimit(3)`처럼 설정하면 최대 3회 재시도하고 그래도 실패 시 실패 처리합니다.
+>
+> chunk-size 트레이드오프도 중요합니다. chunk-size=100이면 100개 단위로 커밋 → 커밋 횟수 감소로 성능 향상. 단 실패 시 100개 전체 롤백 → 단건 재처리로 전환 → **재처리 범위가 커진다**는 단점. 반대로 작으면 재처리 범위는 줄지만 트랜잭션 오버헤드 증가.
+
+**꼬리 질문 예시**:
+- `skip`과 `retry`를 같은 예외 클래스에 동시에 설정하면 어떻게 되나요? → retry가 먼저 적용되고, retryLimit 초과 후에 skip 적용
+- skipLimit과 retryLimit 초과 시 각각 어떻게 처리되나요?
+
+**면접 세션 피드백 (2026-05-02 1회차)**:
+- 잘한 점: skip/retry 케이스 구분 정확, 코드 패턴 정확, chunk 트레이드오프 방향 파악
+- 보완: "재처리 범위가 커진다" 표현 추가 필요. "DB 오버헤드"보다 더 명확한 표현.
+
+---
+
+---
+
+## JPA N+1 문제
+
+### Q. JPA에서 N+1 문제가 무엇인지 설명하고, Fetch Join / @EntityGraph / @BatchSize 세 가지 해결 방법의 차이와 적합한 상황을 설명해주세요. Fetch Join과 페이지네이션을 함께 사용할 때 발생하는 문제와 해결 방법도 설명해주세요.
+
+**난이도**: 기초
+
+**핵심 키워드:** N+1, lazy loading, Fetch Join, JOIN FETCH, MultipleBagFetchException, @EntityGraph, @NamedEntityGraph, @BatchSize, IN 절, Hibernate 메모리 페이징, OOM, 지연 조인, 커버링 인덱스
+
+**N+1 정의:**
+- 1번의 목록 조회 쿼리 후, 연관 엔티티 접근 시 각 엔티티마다 쿼리 발생
+- 100개 Post → 100번 Author 조회 = 총 101번 쿼리
+
+**해결 방법 비교:**
+
+| 방법 | 방식 | 장점 | 단점/주의 |
+|---|---|---|---|
+| Fetch Join | JPQL `JOIN FETCH` 명시 | 복잡한 쿼리 직접 제어 | 컬렉션 2개+ → `MultipleBagFetchException` |
+| @EntityGraph | 선언적 eager 로딩 | 쿼리 작성 불필요, 간단 | 복잡한 조건에서 예상치 못한 쿼리 |
+| @BatchSize | IN 절 묶음 조회 | lazy loading 유지하며 N회 → N/size회 | 완전한 1회 조회 아님 |
+
+**@EntityGraph 선언 위치 (두 가지):**
+1. Repository 메서드 위: `@EntityGraph(attributePaths = {"author"})`
+2. Entity 클래스에: `@NamedEntityGraph(name="...", attributeNodes=...)` 후 Repository에서 참조
+
+**@BatchSize 정확한 효과:**
+- "lazy loading 방지" ❌ → "N번을 batch_size로 나눈 횟수로 줄임" ✅
+- 100건 + size=10 → 1+10번 쿼리
+- `application.yml`: `hibernate.default_batch_fetch_size: 100`
+
+**Fetch Join + Pagination 문제:**
+- Hibernate가 전체 JOIN 결과를 메모리에 올린 뒤 페이징 → OOM 위험
+- 경고 로그: `HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory!`
+
+**지연 조인(Deferred Join) 해결:**
+1. 페이지네이션이 적용된 ID 목록만 먼저 조회 (커버링 인덱스 활용)
+2. 조회된 ID를 IN 절로 넘겨 연관 엔티티 함께 조회
+
+**꼬리 질문 예시:**
+- @BatchSize로 설정했을 때 N+1이 완전히 없어지나요?
+- 컬렉션 2개를 Fetch Join하면 어떻게 되나요? → MultipleBagFetchException
+- 지연 조인에서 커버링 인덱스를 왜 사용하나요?
+
+**면접 세션 피드백 (2026-05-02 2회차)**:
+- 잘한 점: N+1 정의 정확, 세 가지 해결책 모두 커버, Fetch Join + Pagination OOM 문제 파악, 지연 조인 + 커버링 인덱스까지 언급 (차별화 포인트)
+- 보완: @BatchSize "lazy loading 방지"→ "N을 batch_size로 나눈 횟수로 줄임"으로 표현 교정. @EntityGraph 이중 선언 위치 암기.
+
+---
+
+## Spring @Component vs @Bean / 생성자 주입
+
+### Q. @Component와 @Bean의 차이를 설명하고, 생성자 주입이 @Autowired 필드 주입보다 권장되는 이유를 final 불변성, 순환 참조 감지, 테스트 용이성 관점에서 설명해주세요.
+
+**난이도**: 기초
+
+**핵심 키워드:** @Component, 클래스 레벨, 컴포넌트 스캔, @Bean, 메서드 레벨, @Configuration, 외부 라이브러리, final 불변성, ApplicationContext 초기화, 순환 참조, Mock 주입
+
+**@Component vs @Bean:**
+
+| | @Component | @Bean |
+|---|---|---|
+| 선언 위치 | 클래스 레벨 | @Configuration 클래스의 메서드 레벨 |
+| 등록 방식 | 컴포넌트 스캔 자동 감지 | 메서드 직접 호출로 인스턴스 반환 |
+| 주 사용처 | 직접 작성한 클래스 | 외부 라이브러리, 초기화 로직 세밀 제어 필요 시 |
+
+**생성자 주입 권장 이유:**
+1. **final 불변성**: 필드를 final로 선언 가능 → 한 번 주입된 의존성 변경 불가, 컴파일러 보장
+2. **순환 참조 감지**: **Spring ApplicationContext 초기화 시점**에 즉시 오류 발생 (컴파일/빌드 시점 아님)
+3. **테스트 용이성**: Spring 컨텍스트 없이 `new` + Mock 직접 주입 가능
+
+**꼬리 질문 예시:**
+- 순환 참조 감지가 컴파일 시점인가요, 런타임인가요? → ApplicationContext 초기화 시점
+- @Bean 없이 외부 라이브러리 클래스를 빈으로 등록할 수 있나요?
+
+**면접 세션 피드백 (2026-05-02 3회차)**:
+- 잘한 점: @Component/@Bean 사용 케이스 구분, final + Mock + 순환참조 세 가지 언급
+- 보완: 순환 참조 감지 시점 = "ApplicationContext 초기화 시점" (컴파일/빌드 아님), @Bean은 메서드 레벨 + @Configuration 안에서 선언
+
+---
+
+## Spring Security JWT 인증
+
+### Q. JWT 기반 인증을 Spring Security에 적용할 때 SecurityFilterChain 구성 방법, JWT 검증 필터 위치, Refresh Token 탈취 방지 전략을 설명해주세요.
+
+**난이도**: 중급
+
+**핵심 키워드:** SecurityFilterChain, csrf.disable(), STATELESS, addFilterBefore, OncePerRequestFilter, UsernamePasswordAuthenticationToken, SecurityContextHolder, HttpOnly Cookie, RTR(Refresh Token Rotation), Redis 무효화
+
+**SecurityFilterChain 핵심 구성 3종 세트:**
+```java
+http
+  .csrf().disable()
+  .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+  .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+```
+
+**JWT 필터 흐름 (OncePerRequestFilter):**
+1. Authorization 헤더에서 Bearer 토큰 추출
+2. 서명 유효성 + 만료 여부 검증
+3. 페이로드에서 사용자 식별자 추출 → UserDetailsService로 로드
+4. `UsernamePasswordAuthenticationToken` 생성 → `SecurityContextHolder.getContext().setAuthentication()` 직접 저장
+5. `filterChain.doFilter()` 로 다음 필터로 이동
+
+> `UsernamePasswordAuthenticationFilter`는 폼 로그인 처리용. JWT 흐름과 무관.
+
+**RTR (Refresh Token Rotation):**
+- Refresh Token 사용 시: 기존 토큰 Redis 삭제 + 새 토큰 발급
+- 탈취된 토큰이 먼저 사용되면 → 정상 사용자 토큰 이미 무효화 → 재로그인 강제 → 탈취 감지
+- Redis 구조: `userId → refreshToken`
+
+**꼬리 질문 예시:**
+- JWT 필터 이후에 UsernamePasswordAuthenticationFilter가 다시 비밀번호를 확인하나요? → 아님. JWT 필터가 SecurityContextHolder에 직접 설정
+- HttpOnly Cookie 단독으로 탈취를 완전히 방지할 수 있나요? → 아님. RTR 조합 필요
+
+**면접 세션 피드백 (2026-05-02 3회차)**:
+- 잘한 점: OncePerRequestFilter JWT 검증, HttpOnly Cookie 방향 파악
+- 보완: UsernamePasswordAuthenticationFilter는 JWT 흐름과 무관. JWT 필터가 SecurityContextHolder 직접 설정. RTR 패턴 암기 필수.
+
+---
+
+## @Scheduled 분산 환경 중복 실행 문제
+
+**난이도:** 기초
+
+**핵심 키워드:** JVM 레벨 스케줄러, ShedLock(lockAtMostFor), Redis 분산락(SETNX + TTL), Redisson tryLock, ZooKeeper ephemeral node, 세션 만료 자동 삭제
+
+**모범 답변 방향:**
+
+@Scheduled는 JVM 레벨 스케줄러이므로 N개 인스턴스 → N번 독립 실행.
+
+**구현 전략 (우선순위 순):**
+
+1. **ShedLock** — 가장 많이 쓰는 방식. 별도 인프라 불필요, 기존 DB 테이블 하나로 분산락 구현.
+   ```java
+   @SchedulerLock(name = "myTask", lockAtMostFor = "10m", lockAtLeastFor = "1m")
+   ```
+   - `lockAtMostFor`: 크래시 시 최대 락 유지 시간 (TTL 역할) → 자동 해제 보장
+   - `shedlock` 테이블의 `lock_until` 컬럼으로 만료 관리
+
+2. **Redis 분산락 (Redisson)** — Redis 인프라가 이미 있을 때.
+   ```java
+   RLock lock = redissonClient.getLock("myTask");
+   lock.tryLock(0, 10, TimeUnit.MINUTES);
+   ```
+   - `SET lock_key value NX PX {TTL}` 원자적 점유 + TTL 자동 만료
+   - Redisson watchdog: 작업 진행 중 TTL 자동 연장
+
+3. **ZooKeeper ephemeral node** — ZooKeeper 인프라가 있을 때.
+   - ephemeral node 생성 → 세션 끊기면 자동 삭제 → Watch 이벤트로 다른 인스턴스 감지
+
+**꼬리 질문 예시:**
+- 락을 획득한 서버가 crash되면 락이 어떻게 해제되나요? (ShedLock: lockAtMostFor 만료 / Redis: TTL 만료 자동 해제 / ZooKeeper: ephemeral node 세션 만료 자동 삭제)
+- ShedLock의 lockAtMostFor와 lockAtLeastFor 차이는?
+- Redis TTL을 너무 짧게 설정하면 어떤 문제가 생기나요?
+
+**면접 세션 피드백 (2026-05-02 7회차)**:
+- 잘한 점: 중복 실행 원인(JVM 독립 cron), Redis/ZooKeeper 두 전략, 단일 스레드 원자성, ZooKeeper 실무 경험 연결
+- 보완: Redis = TTL 만료 자동 해제("키 삭제" 표현 부정확). ZooKeeper = ephemeral node 세션 만료 자동 삭제("다시 등록" 표현 부정확).

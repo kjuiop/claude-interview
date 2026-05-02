@@ -549,3 +549,31 @@ related: [redis/concepts, distributed-systems, system-design, kafka]
 - listpack이 도입된 Redis 버전은 언제인가요? ziplist와 어떤 자료구조에서 대체됐나요?
 
 > 출처: [How Redis Hashes Work Internally (listpack)](https://oneuptime.com/blog/post/2026-03-31-redis-hashes-work-internally-hashtable-listpack/view) | [listpack spec](https://github.com/antirez/listpack/blob/master/listpack.md)
+
+## ZRANGE vs ZRANGEBYSCORE 사용 기준
+
+### Q. Redis Sorted Set에서 `ZRANGE`와 `ZRANGEBYSCORE`의 차이와 각각 언제 사용하나요?
+
+**난이도**: 기초
+
+**핵심 키워드**: ZRANGE, ZRANGEBYSCORE, 인덱스 번호(0-based), score 값 범위, 단일 스레드 원자성
+
+**핵심 구분**:
+- `ZRANGE key 0 9` → **인덱스 번호** 기준 (0번째~9번째 = 상위 10개). "상위 N개" 조회에 사용.
+- `ZRANGEBYSCORE key 1000 5000` → **score 값** 기준 (score 1000~5000 사이). "특정 점수 구간" 필터에 사용.
+
+**실무 선택 기준**:
+- 상위 10개 광고주 조회 → `ZRANGE key 0 9`
+- 입찰가 1,000원~5,000원 사이 광고주 → `ZRANGEBYSCORE key 1000 5000`
+
+**원자성 보장 이유**: Redis는 단일 스레드로 명령을 처리하기 때문에 여러 서버가 동시에 ZADD를 호출해도 이벤트 루프가 하나씩 순서대로 처리합니다. 별도 락 없이도 score 업데이트 정합성이 유지됩니다.
+
+**꼬리 질문 예시**:
+- ZRANGE 0 -1은 어떤 의미인가요? → -1은 마지막 인덱스를 의미. 전체 조회.
+- ZREVRANGE와 ZRANGE의 차이는? → ZREVRANGE는 내림차순(score 높은 것부터)
+
+**면접 세션 피드백 (2026-05-02 1회차)**:
+- 잘한 점: ZRANGE/ZRANGEBYSCORE 구분 방향 정확, 단일 스레드 원자성 파악
+- 보완: ZRANGE 파라미터가 **인덱스 번호(0-based)**임을 명시. "순위를 검색"이 아닌 "`ZRANGE key 0 9` → 0번째~9번째 = 상위 10개"로 구체적으로 표현.
+
+---

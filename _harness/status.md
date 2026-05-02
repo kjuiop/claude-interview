@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-04-29
+updated: 2026-05-02
 ---
 
 # 현재 준비 상태 스냅샷
@@ -18,6 +18,7 @@ updated: 2026-04-29
 | 넵튠 | 솔루션개발실 백엔드 | 2026-04-10 | 신규 등록 |
 | 인포뱅크 | iXpert AI 프로덕트 엔지니어 | 2026-04-17 | 준비 중 |
 | 채널톡 | Enterprise Solution Engineer (AX팀) | 2026-04-17 | 준비 중 |
+| 인라이플 | 백엔드 개발자(JAVA) | 2026-04-30 | 면접 2026-05-01(목) |
 
 ---
 
@@ -38,12 +39,14 @@ updated: 2026-04-29
 | python-fastapi | ★★★★☆ | 2026-04-29 | yield setup/teardown + 요청 스코프 격리 메커니즘 8/10 해결 ✅. "각 요청이 독립된 인스턴스 → 세션 오염 없음 = 요청 스코프" 결론 표현 추가 필요 |
 | java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
 | networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
-| mysql | ★★★★☆ | 2026-04-29 | 지연 조인(Deferred Join) 7/10 — PK 서브쿼리+JOIN 패턴 파악. "커버링 인덱스로 처리" 표현 아직 미언급. 커서 기반 단점(임의 점프 불가) 정확. |
+| mysql | ★★★★☆ | 2026-04-30 | 복합 인덱스 컬럼 순서 7/10 — 등치→범위 원칙·결론 정확. B-Tree 선두 범위 시 이후 컬럼 인덱스 미사용 이유 미언급. 지연 조인 "커버링 인덱스로 처리" 표현 아직 미언급. |
 | redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
-| kafka | ★★★★★ | 2026-04-28 | Exactly-Once 10/10 — PID+Sequence/transactional.id/isolation.level/Outbox+Inbox 전 레이어 완벽 설명 ✅ |
+| kafka | ★★★★☆ | 2026-05-02 | ISR 복습 9/10 ✅ — 리더 포함 오개념 교정, NotEnoughReplicasException 암기 완료. replica.lag.time.max.ms 한 줄 추가 필요(마지막 1점). Rebalancing 7/10 — LeaveGroup 키워드 미사용. |
 | rabbitmq | ★★★★☆ | 2026-04-28 | DLQ 3조건(TTL/NACK+requeue=false/x-max-length) + x-dead-letter-exchange 속성명 + x-death 헤더(count/reason/queue/exchange) 4회 연속 블로킹 드디어 해결 ✅ |
+| clickhouse | ★★★★☆ | 2026-05-02 | 7/10. ORDER BY 블록 스캔 + PARTITION BY 프루닝/DROP 구분 완성. sparse index(granule + primary.idx) 개념이 "Primary Key 역할" 설명 핵심 — 아직 미언급. 선두 컬럼 설계 기준 추가 필요. |
+| java/spring-batch | ★★★★☆ | 2026-05-02 | faultTolerant skip/retry 코드 패턴 9/10 ✅. skip=영구오류/retry=일시오류 케이스 구분 완성. "재처리 범위가 커진다" 표현 추가 연습 필요. |
 | kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
-| kubernetes | ★★★★☆ | 2026-04-29 | volumeClaimTemplates 8/10 ✅. HPA 6/10 — stabilizationWindowSeconds(기본 5분) vs PDB(minAvailable/maxUnavailable) 혼동. desiredReplicas 계산 공식 미언급 |
+| kubernetes | ★★★★☆ | 2026-05-02 | 배포 전략 복습 9/10 ✅ — ArgoCD GitOps(Git SSOT+diff+sync) 교정 완료. readiness probe failureThreshold + periodSeconds 2개 추가 명시 필요(마지막 1점). HPA 6/10 — stabilizationWindowSeconds vs PDB 혼동. |
 | zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
 | distributed-systems | ★★★☆☆ | 2026-04-12 | 2PC 전혀 모름 — Phase 1/2 흐름, Blocking 원인, 3PC 차이 암기 필요. Saga 선택 이유 방향은 알고 있음 |
 | elasticsearch | ★★★★☆ | 2026-04-28 | Analyzer 3단계 7/10 해결. Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 추가 암기 필요 |
@@ -54,11 +57,13 @@ updated: 2026-04-29
 
 ## 다음 우선순위
 
-1. `java/ConcurrentHashMap` — 버킷=배열 슬롯 표현 정착, $sum: 1 카운트 구분 (복습 6/10, 버킷 오류 있음)
-2. `mongodb` — $sum: 1(카운트) vs $sum: "$field"(합산) 구분, _id: "$category" 형태 (5/10 → 재복습 필요)
-3. `kubernetes/HPA` — stabilizationWindowSeconds "가장 높은 값 선택" 표현 정착 + desiredReplicas 공식 암기 (6/10)
-4. `ai-stt` — Re-ranking Cross-encoder 재평가 개념, Hallucination 발생 조건 구체화 (6/10)
-5. `mysql` — 지연 조인에서 "커버링 인덱스로 처리" 표현 추가 (7/10에서 미언급)
+1. `clickhouse` — MergeTree ORDER BY = Primary Key 역할, PARTITION BY 파티션 프루닝, DROP PARTITION 세 가지 암기 필수 (1/10 → 면접 당일 최우선)
+2. `kafka/ISR` — ISR 정의(replica.lag.time.max.ms 기준 집합), min.insync.replicas 미달 → NotEnoughReplicasException(쓰기 차단) 암기 (5/10)
+3. `java/spring-batch` — faultTolerant().skip/retry 코드 패턴 암기. chunk 트레이드오프 커밋횟수/재처리범위 표현 정착 (7/10)
+4. `java/ConcurrentHashMap` — 버킷=배열 슬롯 표현 정착, $sum: 1 카운트 구분 (복습 6/10, 버킷 오류 있음)
+5. `mongodb` — $sum: 1(카운트) vs $sum: "$field"(합산) 구분, _id: "$category" 형태 (5/10 → 재복습 필요)
+6. `kubernetes/HPA` — stabilizationWindowSeconds "가장 높은 값 선택" 표현 정착 + desiredReplicas 공식 암기 (6/10)
+7. `mysql` — 복합 인덱스 B-Tree 원리 한 문장(선두 범위 시 이후 컬럼 인덱스 미사용), 지연 조인 "커버링 인덱스로 처리" 표현 추가
 6. `java/STOMP` — 이력서(카테노이드 채팅 서버) 연결 연습. 내용은 9/10 해결 ✅
 7. `elasticsearch` — Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 상세 암기
 8. `postgresql` — xmin/xmax 내부 구조, XID Wraparound freeze 동작 상세
@@ -77,6 +82,7 @@ updated: 2026-04-29
 | 인포뱅크 | 7 | 2026-04-28 세션 — @Transactional NESTED 7/10(영속성 컨텍스트 불일치 원인 추가 필요), WebSocket/STOMP 5/10(@SendTo 역할 오해), FastAPI Depends() 5/10(요청 스코프 격리 미언급), RabbitMQ DLQ 9/10 ✅ 드디어 해결 |
 | 채널톡 | 4 | 2026-04-21 불합격. archived |
 | 버즈니 | 3 | 2026-04-28 세션 — ES Analyzer 7/10, Kafka Exactly-Once 10/10 ✅, Redis pub/sub 9/10 |
+| 인라이플 | 15 | 2026-05-02 11회차 — Spring Batch faultTolerant 9/10 ✅, DB 무중단 마이그레이션 10/10 ✅, Redis Sorted Set 9/10, K8s ArgoCD GitOps 7/10(선택 이유+readiness 파라미터 보완), Kafka Rebalancing 7/10(LeaveGroup 키워드), ClickHouse ORDER BY sparse index 7/10 |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---

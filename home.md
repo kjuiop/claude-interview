@@ -63,6 +63,7 @@ tags: [home, index]
 - [[topics/redis/concepts]] / [[topics/redis/questions]]
 - [[topics/mongodb/concepts]] / [[topics/mongodb/questions]]
 - [[topics/elasticsearch/concepts]] / [[topics/elasticsearch/questions]]
+- [[topics/clickhouse/concepts]] / [[topics/clickhouse/questions]] — OLAP, MergeTree, ORDER BY Primary Key, PARTITION BY
 
 ### Messaging & Coordination
 - [[topics/kafka/concepts]] / [[topics/kafka/questions]]

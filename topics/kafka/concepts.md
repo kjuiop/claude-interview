@@ -244,3 +244,29 @@ min.insync.replicas=3: ISR 3개 모두 필요 → 내구성 최대, 브로커 1�
 - [[topics/zookeeper/concepts\|ZooKeeper]] 완전 제거 → Kafka 자체 Raft 합의 알고리즘으로 메타데이터 관리
 - Controller 역할을 전담하는 KRaft Controller가 클러스터 상태 관리
 - 장점: 운영 단순화, 빠른 Controller Failover, 파티션 수 확장성 개선
+
+---
+
+## Consumer Group Rebalancing
+
+### Rebalancing 발생 조건
+1. **Consumer 추가/제거/장애**: 새 Consumer가 Group에 join하거나, Consumer가 죽거나 leave할 때
+2. **`max.poll.interval.ms` 초과**: Consumer가 이 시간 안에 다음 `poll()`을 호출하지 못하면 "처리 불능"으로 판단 → 그룹에서 제외
+   - ⚠️ "커밋 타임아웃"이 아님. **poll() 호출 간격** 기준
+   - 메시지 처리 로직이 너무 오래 걸릴 때 발생
+3. **`session.timeout.ms` 초과**: heartbeat가 이 시간 안에 도착하지 않으면 Consumer가 죽었다고 판단
+   - heartbeat는 별도 스레드가 전송 — 처리 중에도 살아있음
+   - max.poll.interval.ms와 구분: session은 heartbeat 기반, max.poll은 처리 시간 기반
+4. **파티션 수 변경**: 토픽에 파티션 추가/삭제 시
+
+### Eager Rebalancing (전통 방식) — Stop-the-World
+- Group Coordinator가 모든 Consumer에게 "전체 파티션 반납" 신호 전송
+- **할당이 바뀌지 않는 Consumer도 강제로 전부 반납** 후 재할당
+- 재배분 완료까지 아무 Consumer도 메시지 처리 못함 → Consumer Lag 급증
+- 처리 중이던 메시지는 offset 미커밋 → 재처리 발생 가능
+
+### Cooperative Sticky Rebalancing (Kafka 2.4+)
+- **이동이 필요한 파티션만 선별**해서 해당 파티션만 반납/재할당
+- 나머지 파티션은 기존 Consumer가 계속 처리 → Stop-the-World 없음
+- 설정: `partition.assignment.strategy=CooperativeStickyAssignor`
+- 2단계 rebalancing으로 진행: 1차(반납할 파티션 식별) → 2차(재할당)
