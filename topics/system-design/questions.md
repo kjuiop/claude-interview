@@ -221,6 +221,82 @@ public OtaResponse otaFallback(String partnerId, Exception e) {
 
 ---
 
+## Nginx + Tomcat 조합의 non-blocking 이점
+
+### Q. Spring Boot(Tomcat) 앞에 Nginx를 두면 non-blocking 관점에서 어떤 이점이 있는지 설명해주세요. Tomcat의 thread-per-request 모델에서 "Slow Client Problem"이 왜 발생하는지, Nginx가 이를 어떻게 해결하는지 포함해서 설명해주세요.
+
+**난이도:** 중급
+
+**핵심 키워드:** thread-per-request, event-driven non-blocking, Slow Client Problem, 응답 버퍼링, 네트워크 I/O 분리
+
+**모범 답변 방향:**
+
+Tomcat은 요청당 스레드 1개를 점유하는 thread-per-request 모델입니다. 문제는 응답을 클라이언트에 전송하는 동안에도 스레드가 묶인다는 것입니다. 서버가 응답을 만드는 시간은 수 ms이지만, 클라이언트 네트워크가 느리면 전송 완료까지 수백 ms~수초가 걸립니다. 이 대기 시간 동안 Tomcat 스레드가 아무것도 못 하고 점유된 채 기다립니다. 동시 접속이 많으면 스레드 풀이 고갈되어 새 요청을 처리할 수 없게 됩니다. 이것이 Slow Client Problem입니다. Nginx는 event-driven 구조로 소수의 워커 스레드로 수천 개의 연결을 non-blocking으로 처리합니다. Tomcat 앞에 Nginx를 두면 흐름이 달라집니다. Tomcat이 응답을 생성해 Nginx에게 전달하는 건 같은 서버 내부 통신이라 거의 즉각적입니다. Tomcat은 Nginx에게 응답을 넘기는 즉시 스레드를 반환합니다. 이후 느린 클라이언트에게 데이터를 천천히 전송하는 네트워크 I/O 대기는 Nginx가 non-blocking으로 담당합니다. 결과적으로 Tomcat 스레드가 묶이는 시간이 "비즈니스 로직 처리 시간"으로만 한정됩니다. 추가 이점으로 Keep-Alive 유휴 연결 관리와 정적 파일(image, css, js) 처리도 Nginx가 담당해 Tomcat 부하를 더 줄일 수 있습니다.
+
+**꼬리 질문 예시:**
+- Nginx가 응답을 클라이언트에게 전송하는 동안 Tomcat 스레드는 어디 있나요?
+- Keep-Alive 연결에서 Nginx가 없으면 어떤 문제가 생기나요?
+- WebFlux(Netty) 쓰면 Nginx 없어도 되나요?
+
+> 출처: 2026-05-04 학습 세션
+
+---
+
+## Spring WebFlux vs Spring MVC
+
+### Q. Spring WebFlux와 Spring MVC(Tomcat)의 동작 방식 차이를 설명해주세요. WebFlux가 사용하는 Netty의 event loop 모델이 Tomcat의 thread-per-request와 어떻게 다른지, Mono/Flux가 무엇인지, 그리고 WebFlux가 적합한 상황과 오히려 불리한 상황을 설명해주세요.
+
+**난이도:** 중급
+
+**핵심 키워드:** event loop, thread-per-request, Netty, Mono, Flux, non-blocking, lazy evaluation, blocking 라이브러리 혼용
+
+**모범 답변 (985자):**
+
+> Spring MVC는 Tomcat의 thread-per-request 모델로 동작합니다. 요청이 들어오면 스레드 풀에서 스레드 하나를 꺼내 처리가 완료될 때까지 점유합니다. I/O 대기 중에도 스레드가 묶여 있어 동시 접속자 수가 스레드 풀 크기에 직접 제한됩니다.
+>
+> Spring WebFlux는 Netty의 event loop 모델로 동작합니다. CPU 코어 수만큼의 event loop 스레드만 생성하고, I/O 작업을 non-blocking으로 처리합니다. DB나 외부 API 응답을 기다리는 동안 event loop 스레드는 다른 요청을 처리하고, I/O가 완료되면 콜백으로 알림을 받아 이어서 처리합니다. 소수의 스레드로 수천 개 동시 연결을 처리할 수 있는 이유입니다.
+>
+> Mono와 Flux는 비동기 결과를 표현하는 타입입니다. `Mono<T>`는 0~1개 결과를 담는 비동기 퍼블리셔로 단건 조회에 사용하고, `Flux<T>`는 0~N개 결과를 스트림으로 담아 목록 조회나 실시간 스트리밍에 사용합니다. 둘 다 구독(subscribe)하는 시점에 실제 실행이 시작되는 lazy 방식입니다.
+>
+> WebFlux가 적합한 상황은 외부 API 다수 동시 호출, 채팅처럼 연결은 많지만 전송은 적은 경우, 대용량 스트리밍입니다. 반면 JPA처럼 blocking 라이브러리를 혼용하면 event loop 스레드가 blocking되어 오히려 처리량이 떨어집니다. 단순 CRUD 위주라면 비동기 코드 복잡도만 높아지고 이득이 없어 MVC가 더 적합합니다.
+
+**꼬리 질문 예시:**
+- Mono/Flux에서 subscribe()를 호출하지 않으면 어떻게 되나요?
+- WebFlux에서 JPA를 쓰면 왜 문제가 되나요?
+- WebFlux와 Nginx를 같이 쓰는 게 의미가 있나요?
+
+**⚠️ 면접 세션 피드백 (2026-05-04)**:
+- 처음 출제 — 전혀 모름(0/10). 모범 답변 암기 후 재출제 필요.
+- 암기 우선순위: event loop(CPU 코어 수 스레드) → Mono/Flux(0~1 vs 0~N, lazy) → 적합/불리 상황(blocking 혼용이 핵심)
+
+> 출처: 2026-05-04 학습 세션
+
+---
+
+## REST API 설계 원칙
+
+### Q. HTTP PUT과 PATCH의 차이를 설명하고, REST API 설계 원칙을 설명해주세요.
+
+**핵심 키워드**: URI=명사(자원), 메서드=동사(행위), PUT=전체 교체, PATCH=부분 수정, 상태코드
+
+**모범 답변 방향**:
+- PUT: 리소스 전체 교체. 보내지 않은 필드는 null로 덮어써짐 → 모든 필드 포함 필요
+- PATCH: 부분 수정. 포함된 필드만 수정
+- URI는 명사: `/api/v1/members/{id}` (동사 금지 — `/deleteUser` ❌)
+- HTTP 메서드: GET(조회), POST(생성), PUT(전체 수정), PATCH(부분 수정), DELETE(삭제)
+- 상태코드: 200(성공), 201(생성 성공+Location 헤더), 400(잘못된 요청), 401(인증 미완료), 403(권한 없음), 404(리소스 없음), 500(서버 에러)
+- 401 vs 403: 401은 "누구인지 모름(로그인 필요)", 403은 "누군지 알지만 접근 불가(권한 없음)"
+
+**꼬리 질문 예시**:
+- PUT은 멱등(idempotent)하고 PATCH는 일반적으로 비멱등인 이유는?
+- 201 응답 시 Location 헤더에는 무엇을 담아야 하나요?
+
+**면접 세션 피드백 (2026-05-06 2회차)**: 8/10
+- 잘한 점: URI 명사/메서드 동사 원칙을 예시와 함께 명확히 설명. GET/POST/PATCH/PUT/DELETE 역할 정확 매핑.
+- 보완: 상태코드 기준 한 문장 추가 필요
+
+---
+
 ## 작성 예정
 
 - 대용량 파일 업로드 시스템 설계 질문

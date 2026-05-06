@@ -391,6 +391,13 @@ VirtualService: 라우팅 규칙 (두 가지 독립 매칭)
 - 5회차: PDB 구분 ✅, "천천히 내린다" 오해 → 꼬리 후 "가장 높은 값 선택" 교정 → 7/10
 - 반드시 암기: stabilizationWindowSeconds = "윈도우 동안 가장 높은 replica 수 선택" (천천히 내리는 게 아님)
 
+**면접 세션 피드백 (2026-05-03 3회차)**:
+- desiredReplicas 공식 방향 ✅, stabilizationWindowSeconds "가장 높은 값 선택" ✅
+- PDB voluntary disruption 범위(스케일다운+배포 모두) 꼬리 질문에서 교정 ✅
+- 보완: 공식 표현 교정 — `ceil(currentMetricValue / targetMetricValue * currentReplicas)` (×100 없음)
+- 보완: PDB 설정 형태 `minAvailable: 1` 또는 `maxUnavailable: 1` 암기
+- 점수: 8/10
+
 ---
 
 ## 배포 전략 — Rolling Update / Blue-Green / Canary
@@ -430,3 +437,30 @@ VirtualService: 라우팅 규칙 (두 가지 독립 매칭)
 **면접 세션 피드백 (2026-05-02 2회차)**:
 - 잘한 점: Rolling Update 메커니즘, 3가지 전략 비교 명확, 트러블슈팅 경험 연결
 - 보완: Rolling Update 선택 이유 미언급, ArgoCD = "kubectl 대신 수행"이 아닌 GitOps 패턴이 핵심, readiness probe 파라미터 암기 필요
+
+---
+
+## readiness probe vs liveness probe
+
+### Q. readiness probe를 설정하는 이유와 `initialDelaySeconds`, `periodSeconds`, `failureThreshold` 각각의 역할을 설명해주세요. 실패 시 Pod에 어떤 일이 발생하는지, liveness probe와 어떻게 구분하는지도 설명해주세요.
+
+**핵심 구분 — 가장 많이 혼동하는 포인트:**
+
+| | readiness probe | liveness probe |
+|---|---|---|
+| 목적 | 트래픽 받을 준비 됐는지 | Pod가 살아있는지 |
+| 실패 시 동작 | **NotReady → Service 엔드포인트에서 제거** | **컨테이너 재시작** |
+| Pod 재시작 | ❌ (Pod는 살아있음, 트래픽만 차단) | ✅ |
+
+**파라미터 역할:**
+- `initialDelaySeconds`: 컨테이너 시작 후 첫 번째 probe 실행까지 대기 시간. Spring Boot 느린 부팅 시 필수.
+- `periodSeconds`: 정기 체크 주기 (성공/실패 무관하게 매 N초마다)
+- `failureThreshold`: 연속 실패 허용 횟수. 초과 시 readiness → NotReady, liveness → 재시작
+
+**Rolling Update 무중단 연결:**
+- 새 Pod의 readiness probe 실패 → NotReady → 이전 Pod로만 트래픽 유지 → 배포 중단
+- readiness probe 통과 후에야 이전 Pod 종료 → 무중단 보장
+
+**면접 세션 피드백 (2026-05-03 1회차)**:
+- 잘한 점: readiness 목적, initialDelaySeconds Spring Boot 맥락, 트래픽 차단 동작 정확
+- 보완: failureThreshold 초과 → **"NotReady → Service 엔드포인트에서 제거"** 정확한 표현 암기. "broken 상태" → NotReady. liveness 실패 = 재시작과 대조 필수.

@@ -79,3 +79,34 @@ PARTITION BY toYYYYMM(occurred_at)     -- 월 단위 프루닝 + DROP PARTITION
 **면접 세션 피드백 (2026-05-02 4회차)**:
 - 잘한 점: ORDER BY 블록 스캔 효율화, PARTITION BY 프루닝 + DROP PARTITION 구분, 설계 예시 연결 7/10
 - 보완: sparse index(granule + primary.idx) 개념이 "Primary Key 역할" 설명의 핵심. 컬럼형 저장과 혼동하지 말 것.
+
+---
+
+## ReplacingMergeTree
+
+### Q. ReplacingMergeTree 엔진이 중복 데이터를 제거하는 방식을 설명해주세요. FINAL 키워드의 역할과 트레이드오프, MergeTree/ReplacingMergeTree/AggregatingMergeTree의 사용 사례 차이, 멱등성 보장 패턴도 함께 설명해주세요.
+
+**난이도:** 기초~중급
+**핵심 키워드:** 백그라운드 비동기 병합, 병합 시점 불예측, FINAL 강제 병합, 단일 스레드 성능 저하, AggregatingMergeTree Materialized View, event_id 멱등성, eventual consistency
+
+**FINAL 키워드**
+- 병합이 완료되기 전 SELECT하면 중복 행이 그대로 보임
+- FINAL: 쿼리 시점에 강제로 병합 로직 적용 → 중복 제거된 결과 반환
+- 단점: 단일 스레드 처리 → 대용량 테이블에서 쿼리 성능 크게 저하
+- 대안: FINAL 없이 조회 후 앱 레벨에서 최신 버전 선택, 또는 병합 완료 후 읽는 주기 조정
+
+**엔진 선택 기준**
+| 엔진 | 사용 사례 |
+|---|---|
+| MergeTree | 중복 없는 시계열/이벤트 로그 |
+| ReplacingMergeTree | 동일 키 최신 상태만 유지 |
+| AggregatingMergeTree | SUM/COUNT 집계 상태 누적 (Materialized View) |
+
+**멱등성 보장 패턴**
+- ORDER BY에 event_id 포함
+- Kafka at-least-once 환경에서 중복 삽입되어도 병합 후 단일 행으로 수렴
+- 삽입 자체는 멱등하지 않지만 병합 결과가 eventual consistency로 수렴
+
+**면접 세션 피드백 (2026-05-05 1회차)**:
+- 4/10 — 백그라운드 병합 개념은 맞으나 FINAL 동작 오해(불변 잠금으로 착각), AggregatingMergeTree/멱등성 패턴 미언급
+- 핵심 암기: "FINAL = 쿼리 시점 강제 병합, 단일 스레드 성능 저하"

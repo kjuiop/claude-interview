@@ -180,6 +180,31 @@ Offset은 파티션 내 메시지의 고유 순번으로, Consumer가 어디까�
 | **수동 동기 커밋** (`commitSync()`) | 처리 후 명시적 커밋, 성공 대기 | 정확한 at-least-once 보장 | 커밋 응답 대기 → 처리량 낮음 |
 | **수동 비동기 커밋** (`commitAsync()`) | 처리 후 비동기 커밋, 콜백 | 처리량 높음 | 실패 시 재시도 로직 필요 |
 
+**auto.offset.reset 동작 조건 (2026-05-03 3회차 — 꼬리 질문 연속 실패)**:
+- `auto.offset.reset`은 **커밋된 오프셋이 없을 때만** 동작 (이미 커밋된 오프셋 있으면 무시)
+- `earliest`: 파티션 가장 처음부터 읽기
+- `latest`: 새로 들어오는 메시지부터 읽기
+- **동작하는 조건**: 신규 Consumer 그룹 최초 실행, 또는 retention 기간 초과로 오프셋 소멸 시
+
+**면접 세션 피드백 (2026-05-03 3회차)**:
+- 자동 커밋 위험성(처리 중 죽으면 유실), commitSync 블로킹 설명 맞음
+- 취약: `auto.offset.reset` 동작 조건 전혀 모름(꼬리 2회 연속 "잘 모르겠습니다") — 암기 필요
+- 암기 포인트: "커밋된 오프셋이 **없을 때만** 동작. 있으면 무시"
+
+**면접 세션 피드백 (2026-05-03 5회차 — 재도전)**:
+- auto.commit 위험성, auto.offset.reset 조건, earliest/latest 모두 정확 ✅ → 3회차 대비 개선
+- 취약: commitSync/commitAsync 선택 기준 오답 — **처리 시간이 아닌 도메인 정확성 요구사항**
+- 암기 포인트: "결제/주문=commitSync(유실 불허+처리량 희생), 이벤트로그=commitAsync(처리량 우선+소량 중복 허용)"
+- 점수: 7/10 (3회차 5/10 → 개선)
+
+**면접 세션 피드백 (2026-05-06 4회차 — 재실패 2/10)**:
+- 동작 조건 오답: "브로커 재시작" → "Consumer 재시작" 으로 수정했으나 여전히 오답
+- 핵심 정리: `auto.offset.reset`은 **__consumer_offsets에 유효한 커밋 오프셋이 없을 때만** 동작
+  - ① 신규 Consumer Group (커밋 기록 없음)
+  - ② Retention 만료로 커밋된 오프셋 위치가 삭제 (offset out of range)
+  - 브로커/Consumer 재시작은 트리거 아님 — 재시작해도 커밋된 오프셋이 남아 있어 이어서 읽음
+- **반드시 암기**: "커밋된 오프셋이 없거나 유효하지 않을 때만 동작. 있으면 완전히 무시."
+
 **⚠️ commitAsync 재시도 주의사항 (면접 세션 피드백 2026-04-14)**:
 `commitAsync` 실패 시 이전 offset으로 재시도하면 안 된다. 비동기 특성상 이미 더 높은 offset이 성공적으로 commit됐을 수 있기 때문이다. 재시도는 반드시 **현재 시점의 최신 offset 기준**으로만 해야 중복 commit을 방지할 수 있다.
 
@@ -354,3 +379,85 @@ error_message: 마지막 실패 원인
 **면접 세션 피드백 (2026-05-02 2회차)**:
 - 잘한 점: poll 간격 제한 개념 정확, session.timeout.ms heartbeat 구분, STW와 Cooperative 개선 방향 파악
 - 보완: **LeaveGroup 요청** 키워드 필수 암기. 트리거 주체(Consumer vs Broker) 대조 표현 추가.
+
+---
+
+## Producer 배치 설정 (처리량 최적화)
+
+### Q. Kafka Producer의 `linger.ms`, `batch.size`, `acks` 설정이 처리량(throughput)과 지연(latency)에 미치는 영향을 설명해주세요.
+
+**세 파라미터 역할:**
+
+| 파라미터 | 역할 | 기본값 | 처리량↑ 설정 |
+|---|---|---|---|
+| `linger.ms` | 배치 대기 시간 | 0 (즉시 전송) | 높게 (예: 500) |
+| `batch.size` | 배치 최대 크기(bytes) | 16KB | 높게 (예: 1MB) |
+| `acks` | 브로커 수신 확인 수준 | 1 | 0 (확인 없음) |
+
+**linger.ms와 batch.size는 OR 조건:**
+- `linger.ms` 경과 **또는** `batch.size` 도달 → 먼저 충족되는 조건에서 즉시 전송
+- 트래픽이 많으면 `linger.ms` 이전에 `batch.size`에 도달해 더 자주 전송됨
+
+**acks 레벨 비교:**
+- `acks=0`: 브로커 수신 확인 없음. 가장 높은 처리량, 메시지 유실 가능
+- `acks=1`: 리더 브로커만 수신 확인. 중간 균형
+- `acks=-1(all)`: ISR 전체 복제 완료 후 확인. 가장 안전, 지연 증가
+
+**도메인별 선택 기준:**
+- 이벤트 집계(소량 유실 허용): `acks=0`, `linger.ms=500`, `batch.size=1MB` → 처리량 극대화
+- 결제/주문(유실 불가): `acks=-1` + `min.insync.replicas=2` → 안전 우선
+
+**실무 팁:** kafka-ui에서 메시지 평균 바이트 확인 → `1MB / 평균 바이트` = 배치당 메시지 수 추정 가능
+
+**면접 세션 피드백 (2026-05-03 1회차)**:
+- 잘한 점: 수치 명확(500ms, 1MB, acks=0), 비즈니스 맥락(장애 아닌 500ms 지연), OR 조건 정확, kafka-ui 실측 경험 연결
+- 보완: acks 0/1/-1 레벨 비교 + 도메인별 선택 기준 추가하면 완성
+
+---
+
+## Outbox Pattern — DB + Kafka 정합성 보장
+
+**난이도**: 기초
+
+**핵심 키워드**: Outbox Pattern, DB 트랜잭션 원자성, Kafka 롤백 불가, CDC, Debezium, Polling, at-least-once, 멱등성
+
+**모범 답변 방향**:
+
+Kafka에 직접 발행하면 DB 트랜잭션은 롤백되어도 Kafka 메시지는 이미 발행된 상태가 되어 정합성이 깨진다. Outbox 패턴은 메시지를 Kafka로 직접 보내지 않고 같은 트랜잭션 안에서 Outbox 테이블에 저장한다. DB 저장이 성공하면 메시지도 저장, 실패하면 함께 롤백되어 정합성이 보장된다.
+
+**DB → Kafka 전송 방식:**
+- Polling: 주기적으로 Outbox 테이블 조회 → 구현 쉬움, 지연 발생, DB 부하
+- CDC(Debezium): binlog 감지 → 즉시 전송, 실시간, Debezium 운영 복잡도
+
+**주의**: Outbox 패턴도 at-least-once 보장. 중복 발행 가능성 있어 Consumer 측 멱등성 처리 필요.
+
+**면접 세션 피드백 (2026-05-04 2회차)**:
+- 잘한 점: 직접 발행 문제(정합성), Outbox 구조, Polling/CDC 트레이드오프, Debezium 언급 정확
+- 미언급: at-least-once + Consumer 멱등성
+
+---
+
+## Consumer lag 진단 및 확장 전략
+
+### Q. Kafka Consumer lag이 지속적으로 증가할 때 원인을 어떻게 진단하고 해결하나요? 파티션 수와 Consumer 수의 수평 확장 한계도 함께 설명해주세요.
+
+**난이도:** 중급
+**핵심 키워드:** Log End Offset, 원인 분류(처리 느림 vs 생산 빠름), kafka-ui, kafka-exporter, KEDA, 파티션=Consumer 최대 병렬도, idle Consumer, Rebalancing
+
+**lag 원인 분류 (먼저 구분)**
+- Consumer 처리 로직이 느린 경우: DB 병목, 외부 API 호출 → 파티션 늘려도 근본 해결 안 됨 → 처리 로직 최적화 먼저
+- 생산 속도 > 처리 속도인 경우: 파티션 + Consumer 확장으로 해결
+
+**모니터링 방법**
+- kafka-ui: Consumer Group별 lag 직접 확인
+- Kubernetes: kafka-exporter → Prometheus → Grafana 시각화
+- KEDA: lag 메트릭 기반 Consumer Pod 자동 확장
+
+**수평 확장 한계**
+- Consumer 수 < 파티션 수 → Consumer 추가로 처리량 증가
+- Consumer 수 = 파티션 수 → 최대 병렬도
+- Consumer 수 > 파티션 수 → 초과 Consumer는 idle 상태, 처리량 기여 없음
+
+**면접 세션 피드백 (2026-05-05 2회차)**:
+- 9/10 — 모니터링, 파티션:Consumer 비율, idle Consumer, Rebalancing 주의 모두 커버
+- 보완: lag 원인 분류(처리 느림 vs 생산 빠름)를 답변 앞부분에 먼저 제시할 것

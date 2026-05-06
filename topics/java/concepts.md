@@ -414,3 +414,128 @@ JDK Dynamic Proxy와 CGLIB는 모두 런타임에 프록시 객체를 동적으�
 > 출처: https://medium.com/@JanessaTech/java-dynamic-proxy-jdk-and-cglib-26dbdcab0bf0
 > 출처: https://www.kapresoft.com/java/2023/12/28/java-proxy-vs-cglib.html
 > 출처: https://www.baeldung.com/java-dynamic-proxies
+
+---
+
+## @Async — SimpleAsyncTaskExecutor 문제와 ThreadPoolTaskExecutor
+
+**기본 문제:**
+- `@Async` 기본 executor: `SimpleAsyncTaskExecutor` — 요청마다 새 스레드 생성, 스레드 풀 없음
+- 트래픽 급증 시 스레드 무제한 증가 → OOM 위험
+
+**ThreadPoolTaskExecutor 팽창 순서 (암기):**
+```
+요청 → corePoolSize 이하: 새 스레드 생성
+     → corePool 포화: queueCapacity까지 큐 대기
+     → 큐 포화: maxPoolSize까지 스레드 추가
+     → maxPool 포화: RejectedExecutionException
+```
+핵심: **maxPool 확장은 큐가 가득 찬 이후**
+
+**self-invocation 문제:**
+- `this.method()` 호출은 AOP 프록시를 우회 → @Async 무효
+- 해결: 별도 Bean 분리 또는 `ApplicationContext`에서 self-reference 주입
+
+**면접 세션 피드백 (2026-05-04 3회차)**: 전혀 모름 → 집중 학습 필요
+
+---
+
+## Spring Batch — Chunk 지향 처리
+
+**구조:**
+- `Job` → 여러 `Step`
+- `Step` = `ItemReader` + `ItemProcessor` + `ItemWriter`
+
+**Chunk 지향 처리 핵심:**
+- ItemReader가 chunk size만큼 읽기 → ItemProcessor 가공 → ItemWriter 한 번에 쓰기 = **하나의 트랜잭션**
+- chunk 단위 배치 insert → DB 라운드트립 최소화
+
+**Chunk size 결정 기준:**
+- 크면: DB 오버헤드↓, 메모리 사용↑(OOM 위험), 실패 시 롤백 범위↑
+- 작으면: 트랜잭션 오버헤드↑
+
+**오류 처리 (faultTolerant):**
+- `skip`: 데이터 정합성 오류 — 재시도해도 의미 없는 케이스
+- `retry`: 네트워크 일시 오류 — 재시도로 해결 가능한 케이스
+- skip/retry limit 초과 → Step 실패 → `JobRepository` 기록
+- 재실행 시 성공한 Step 건너뛰고 실패 Step부터 재시작
+
+---
+
+## 싱글톤 패턴
+
+애플리케이션 전체에서 인스턴스를 하나만 생성해 공유하는 패턴. Spring Bean이 기본 싱글톤 스코프로 관리된다.
+
+### thread-safe 구현 3가지
+
+**1. synchronized 메서드 방식 (성능 낭비)**
+```java
+public synchronized static Singleton getInstance() {
+    if (instance == null) instance = new Singleton();
+    return instance;
+}
+```
+인스턴스 생성 후에도 매 호출마다 락 획득 → 불필요한 병목
+
+**2. double-checked locking (권장)**
+```java
+private static volatile Singleton instance;
+
+public static Singleton getInstance() {
+    if (instance == null) {
+        synchronized (Singleton.class) {
+            if (instance == null) instance = new Singleton();
+        }
+    }
+    return instance;
+}
+```
+- `volatile` 필수: CPU는 성능을 위해 각자의 캐시에 변수 값을 복사해 사용한다. volatile 없이는 Thread A가 인스턴스를 생성해도 메인 메모리에 반영되기 전에 Thread B의 캐시에는 여전히 null로 보여 인스턴스를 중복 생성할 수 있다. volatile을 붙이면 읽기/쓰기 시 반드시 메인 메모리를 거치도록 강제해 모든 스레드가 항상 최신값을 본다.
+- 이미 생성된 후에는 락 없이 반환 → 성능 개선
+
+**3. enum 방식 (가장 안전)**
+```java
+public enum Singleton {
+    INSTANCE;
+}
+```
+- JVM이 클래스 로딩 시 1회만 생성 보장
+- 직렬화 시에도 새 인스턴스 생성 안 됨
+- 리플렉션으로도 깰 수 없음
+
+### Spring Bean 싱글톤 주의사항
+싱글톤 Bean에 **상태(멤버변수)를 두면 안 된다**.
+모든 요청이 같은 인스턴스를 공유하기 때문에, 상태 저장 시 동시성 문제 발생.
+→ Bean 필드는 의존성(다른 Bean 참조)만, 요청별 상태는 메서드 지역변수로 처리.
+
+**면접 세션 피드백 (2026-05-06 1회차)**: 4/10
+- 잘한 점: Spring Bean 상태 문제 설명 명확
+- 취약: double-checked locking, volatile, enum 싱글톤 전혀 모름 → 반드시 암기
+
+---
+
+## Java 버전별 주요 변화
+
+| 버전 | 핵심 변화 |
+|---|---|
+| Java 8 | Lambda, Stream API, Optional, default method |
+| Java 11 | var(타입 추론), String 유틸(isBlank/strip/lines), HTTP Client API |
+| Java 17 | Sealed Class, Record, LTS — Spring Boot 3.x 최소 요건 |
+| Java 21 | Virtual Thread (GA), Record Pattern, Sequenced Collections |
+
+### Virtual Thread (Java 21)
+- 기존 Platform Thread: OS 스레드와 1:1 매핑 → I/O 대기 시 스레드 블로킹 → 스레드 풀 고갈
+- Virtual Thread: JVM 관리 경량 스레드. I/O 대기 시 JVM이 자동으로 Carrier Thread(플랫폼 스레드)에서 분리(unmount)해 다른 Virtual Thread를 실행
+- 수만 개 생성 가능, OS 스레드 수는 소수 유지 → 대규모 I/O 바운드 서버 처리량 향상
+- 활성화: `spring.threads.virtual.enabled=true` (Spring Boot 3.2+)
+
+### Record (Java 16 정식, 17 LTS)
+```java
+public record UserDto(Long id, String name, String email) {}
+// equals/hashCode/toString/getter 자동 생성, 불변 객체
+```
+Spring Boot 3.x가 Java 17 최소 요건인 이유: Record + Sealed Class + 보안 강화(Jakarta EE 9).
+
+**면접 세션 피드백 (2026-05-06 2회차)**: 4/10
+- 잘한 점: Virtual Thread 경량 스레드 + I/O 블로킹 해결 방향 파악
+- 취약: Java 11·17 변화 전혀 모름. 버전별 한 줄 요약 암기 필요

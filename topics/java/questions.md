@@ -68,6 +68,11 @@ AOP(Aspect-Oriented Programming)는 OOP만으로는 분리하기 어려운 횡�
 - `@Around`에서 `proceed()`를 호출하지 않으면 어떻게 되나요?
 - `@AfterReturning`과 `@Around`에서 반환값을 바꾸는 방법의 차이는?
 
+**⚠️ 면접 세션 오개념 (2026-05-04 7회차)**:
+- "proceed()를 호출하지 않으면 AOP 함수가 실행되지 않는다" → **오답**
+- 정답: `@Around` 어드바이스 코드는 정상 실행되지만 **원본 메서드만 실행되지 않는다** (반환값 null)
+- 의도적 활용: 캐시 히트 시 proceed() 생략 후 캐시 값 반환 / 권한 없으면 proceed() 없이 예외 던지기
+
 > 출처: https://www.swiftorial.com/tutorials/backend_framework/spring_framework/spring_aop/best_practices_for_spring_aop
 
 ---
@@ -388,6 +393,10 @@ Spring IoC(Inversion of Control) 컨테이너는 객체의 생성, 의존성 주
 - JDK Dynamic Proxy에서 리플렉션을 사용하는 부분은 어디인가요?
 - Spring Boot에서 CGLIB 대신 JDK Proxy로 전환하려면 어떻게 설정하나요?
 
+**⚠️ 면접 세션 추가 포인트 (2026-05-04 7회차)**:
+- Spring Boot 2.x CGLIB 기본 이유 추가: 인터페이스 없는 클래스뿐 아니라, 인터페이스가 있어도 `@Autowired MyServiceImpl service`처럼 **구체 타입으로 주입하면 JDK Proxy에서 ClassCastException** 발생. CGLIB는 구체 클래스 서브클래스라 안전.
+- 핵심 키워드: `InvocationHandler`(JDK Proxy) vs `MethodInterceptor`(CGLIB)
+
 > 출처: https://medium.com/@JanessaTech/java-dynamic-proxy-jdk-and-cglib-26dbdcab0bf0
 > 출처: https://www.kapresoft.com/java/2023/12/28/java-proxy-vs-cglib.html
 
@@ -615,10 +624,20 @@ Job
 JobRepository: 실행 상태 DB 저장 → Restart 지원
 ```
 
+**JobInstance vs JobExecution (2026-05-06 세션 추가)**:
+- **JobInstance** = Job + JobParameters 조합으로 식별되는 논리적 실행 단위
+  - 날짜 파라미터 `date=2026-05-06` → 오늘의 JobInstance
+  - 내일 `date=2026-05-07`로 실행 → 새로운 JobInstance
+- **JobExecution** = JobInstance의 실제 실행 시도 1회
+  - 1개의 JobInstance가 FAILED → 재실행 → 같은 JobInstance에 새 JobExecution 추가
+  - **JobInstance : JobExecution = 1:N 관계**
+  - 이 구조 덕분에 Spring Batch는 실패한 배치를 재실행할 때 어느 Step부터 이어서 실행할지 추적 가능
+
 **꼬리 질문 예시**:
 - chunk-size를 크게 하면 어떤 장단점이 있나요?
 - ItemProcessor에서 null을 반환하면 어떻게 되나요? → 해당 아이템을 ItemWriter에 전달하지 않고 스킵
 - Spring Batch에서 실패한 배치를 이어서 재실행하려면 어떻게 하나요? → JobRepository의 실행 상태 기반 Restart
+- JobInstance와 JobExecution의 차이는? → Job+JobParameters=JobInstance(논리 단위), 실행 시도 1회=JobExecution, 1:N 관계
 
 ---
 
@@ -806,3 +825,224 @@ http
 **면접 세션 피드백 (2026-05-02 7회차)**:
 - 잘한 점: 중복 실행 원인(JVM 독립 cron), Redis/ZooKeeper 두 전략, 단일 스레드 원자성, ZooKeeper 실무 경험 연결
 - 보완: Redis = TTL 만료 자동 해제("키 삭제" 표현 부정확). ZooKeeper = ephemeral node 세션 만료 자동 삭제("다시 등록" 표현 부정확).
+
+---
+
+## Java GC
+
+### Q. Java GC가 동작하는 과정을 Heap 영역(Eden, Survivor, Old Gen) 관점에서 설명하고, Minor GC와 Major GC의 차이, G1GC를 사용하는 이유를 SerialGC/ParallelGC와 비교해서 설명해주세요.
+
+**Heap 구조와 GC 흐름:**
+- Young Generation: Eden + Survivor 0 + Survivor 1
+- 새 객체 → Eden 할당 → Minor GC 시 참조 확인 → 생존 객체 → Survivor 0 이동
+- 반복 후 오래 살아남은 객체 → Old Generation 승격
+- Old Generation 가득 참 → Major GC(Full GC) 발생 → 긴 STW
+
+**GC 종류 비교:**
+
+| GC | 스레드 | 특징 | 적합 환경 |
+|---|---|---|---|
+| SerialGC | 단일 | 처리량 낮음 | 소규모 앱 |
+| ParallelGC | 멀티 | 처리량↑, STW 예측 어려움 | 배치 처리 |
+| G1GC | 멀티 | STW 예측·제어 가능 | 대용량 Heap 서버 |
+
+**G1GC 핵심 — 암기 필수:**
+- Heap을 고정 Young/Old 대신 **동일 크기 Region**으로 분할
+- 각 Region의 가비지 비율 추적 → **가비지 가장 많은 Region 우선 수집** = Garbage First
+- Region 단위 증분 수집 → STW 시간 예측·제어 가능
+- 대용량 Heap(4GB+)에서 Full GC 없이 안정적 응답 시간 유지
+
+**면접 세션 피드백 (2026-05-03 2회차)**:
+- 잘한 점: Heap 구조(Eden/Survivor/Old Gen), Minor GC 흐름, Major GC → STW 연결 정확
+- 보완: G1GC = Region 분할 + Garbage First(가비지 많은 Region 우선) → STW 예측 가능. SerialGC/ParallelGC 비교 추가 필요.
+
+**면접 세션 피드백 (2026-05-03 5회차 — 재도전)**: **9/10** ✅
+- Heap 구조, Minor/Major GC, SerialGC/ParallelGC, G1GC Region + Garbage First 우선 수집 모두 완성
+- 보완: G1GC 결론 "STW 시간 예측 가능 → 대용량 Heap 표준 선택" 한 문장 마무리 추가
+- 2회차 5/10 → 5회차 9/10 대폭 개선 ✅
+
+---
+
+## @Async ThreadPoolTaskExecutor
+
+**난이도:** 기초
+
+**핵심 키워드:** SimpleAsyncTaskExecutor, corePoolSize, queueCapacity, maxPoolSize, RejectedExecutionException, self-invocation, AOP 프록시
+
+**모범 답변 방향:**
+
+@Async의 기본 executor인 SimpleAsyncTaskExecutor는 요청마다 새 스레드를 생성합니다. 스레드 풀 없이 요청마다 스레드를 만들기 때문에 트래픽이 몰리면 스레드가 무제한으로 늘어나 OOM이 발생할 수 있습니다. 실무에서는 반드시 ThreadPoolTaskExecutor를 직접 설정해야 합니다. 요청이 들어오면 먼저 corePoolSize까지 스레드를 생성합니다. corePool이 가득 차면 queueCapacity까지 큐에 대기시킵니다. 큐도 가득 차면 그때서야 maxPoolSize까지 스레드를 추가합니다. maxPool도 가득 차면 RejectedExecutionException이 발생합니다. 중요한 점은 maxPoolSize 확장 조건이 queueCapacity 포화 이후라는 것입니다. @Async 메서드를 같은 클래스 내에서 this.method()로 호출하면 비동기가 동작하지 않습니다. @Async는 Spring AOP 프록시를 통해 동작하는데, this 참조는 프록시를 우회하고 실제 객체를 직접 호출하기 때문입니다. 해결 방법은 비동기 메서드를 별도 Bean으로 분리하거나 ApplicationContext에서 self-reference를 주입받아 호출하는 것입니다.
+
+**꼬리 질문 예시:**
+- queueCapacity를 크게 잡으면 maxPoolSize가 잘 늘어나지 않는 이유는 무엇인가요?
+- self-invocation 문제를 해결하는 방법은 무엇인가요?
+
+**면접 세션 피드백 (2026-05-04 3회차)**: 0/10 — 처음 접하는 개념, 전체 보완 필요
+
+---
+
+## Spring Batch Chunk 처리
+
+**난이도:** 기초
+
+**핵심 키워드:** Job, Step, ItemReader, ItemProcessor, ItemWriter, Chunk, 단일 트랜잭션, faultTolerant, skip, retry, JobRepository
+
+**모범 답변 방향:**
+
+Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논리적으로 분리한 실행 단계입니다. 각 Step은 ItemReader, ItemProcessor, ItemWriter로 구성된 Chunk 지향 처리로 구현합니다. Chunk 지향 처리의 핵심은 ItemReader가 chunk size만큼 데이터를 읽고, ItemProcessor가 가공하고, ItemWriter가 한 번에 쓰는 것이 하나의 트랜잭션으로 묶인다는 점입니다. 건당 insert 대신 chunk 단위 배치 insert로 DB 라운드트립을 최소화할 수 있습니다. chunk size가 크면 ItemReader가 그만큼 메모리에 올려두므로 OOM 위험이 있고, 실패 시 롤백 범위도 커집니다. Chunk 처리 중 오류가 발생하면 faultTolerant() 설정에 따라 skip 또는 retry로 처리합니다. skip/retry limit을 초과하면 해당 Step이 실패로 기록되고 JobRepository에 저장됩니다. 이후 재실행 시 성공한 Step은 건너뛰고 실패한 Step부터 재시작할 수 있습니다.
+
+**꼬리 질문 예시:**
+- Chunk size 결정 시 메모리 측면에서 고려할 점은?
+- skip과 retry는 어떤 기준으로 구분하나요?
+
+**면접 세션 피드백 (2026-05-04 3회차)**: 7/10
+- 잘한 점: 전체 구조, skip/retry 구분, JobRepository 재시작
+- 보완: Chunk 지향 처리의 read→process→write 단일 트랜잭션 흐름 명시 필요. Chunk size와 OOM 직접 연결 필요.
+
+---
+
+## Spring 멀티 모듈
+
+### Q. Spring에서 멀티 모듈 프로젝트를 구성할 때 모듈을 어떤 기준으로 분리하는지 설명해주세요. core, api, batch, domain 모듈의 의존성 방향을 지키는 이유, Gradle implementation vs api 의존성 설정 차이도 설명해주세요.
+
+**난이도**: 기초
+**핵심 키워드**: 변경 빈도/재사용 범위/배포 단위, 의존성 단방향(상위→하위), 순환 참조 금지, implementation(내부 한정), api(전이 노출), 기본은 implementation
+
+**모듈 구조**:
+- `core`: 공통 유틸리티, 공통 예외, 공통 DTO — 모든 모듈에서 사용
+- `domain`: 비즈니스 엔티티, JPA 레포지토리
+- `api`: HTTP 요청 처리 (api → domain → core)
+- `batch`: 스케줄러/배치 처리 (batch → domain → core)
+
+**Gradle implementation vs api**:
+- `implementation`: 내부에서만 사용, 이 모듈을 의존하는 상위 모듈에서 접근 불가 (전이 차단)
+- `api`: 상위 모듈에서도 접근 가능 (전이 노출)
+- 원칙: **기본 implementation, 의도적 노출 시에만 api**. api 남발 시 모듈 경계 흐려짐
+
+**면접 세션 피드백 (2026-05-05 3회차)**:
+- 잘한 점: 분리 기준, 의존성 방향, 순환 참조 방지 목적 명확
+- 보완: implementation vs api는 라이브러리/모듈 구분이 아닌 전이 의존성 노출 여부
+
+---
+
+## Spring WebFlux
+
+### Q. Spring WebFlux에서 event loop 모델이 동작하는 방식을 설명해주세요. Mono/Flux lazy evaluation 특성, blocking I/O 혼용 시 문제와 해결 방법도 설명해주세요.
+
+**난이도**: 기초
+**핵심 키워드**: Netty event loop, epoll/kqueue, CPU×2 스레드, I/O 완료 콜백 재개, Mono(0~1)/Flux(0~N), cold publisher, subscribe 전 실행 없음, operator chain, R2DBC, Schedulers.boundedElastic(), 코드 복잡성 트레이드오프
+
+**event loop 동작**:
+1. CPU 코어 × 2 개의 event loop 스레드
+2. `epoll_wait()`로 수천 개 소켓 동시 감시 (I/O multiplexing)
+3. I/O 준비된 소켓만 선택 → 처리 (스레드 블로킹 없음)
+4. I/O 완료 이벤트 → **콜백으로 재개** ("잠시 기다리게 하고"가 아님!)
+
+**lazy evaluation (cold publisher)**:
+- subscribe() 전까지 아무 연산도 실행되지 않음
+- operator chain은 실행 파이프라인 정의일 뿐, 실제 데이터 흐름은 subscribe 이후
+
+**blocking I/O 혼용 문제**:
+- JDBC → event loop 스레드 점유 → 해당 스레드가 담당한 모든 요청 블로킹
+- 해결: R2DBC (reactive DB driver)로 교체, 또는 `Schedulers.boundedElastic()`으로 별도 스레드 풀 분리
+
+**면접 세션 피드백 (2026-05-05 3회차)**:
+- 잘한 점: epoll 기반 event loop, lazy evaluation, 코드 복잡성 트레이드오프
+- 오개념: "잠시 기다리게 하고" → I/O 완료 콜백 재개로 수정 필요
+- 보완: Mono/Flux 기준(0~1/0~N), R2DBC 필요성, cold publisher 개념
+
+---
+
+## Spring AOP — JDK Dynamic Proxy vs CGLIB
+
+### Q. Spring AOP에서 JDK Dynamic Proxy와 CGLIB의 차이를 설명해주세요. Spring Boot의 기본 선택과 각각의 제약 조건도 함께 설명해주세요.
+
+**난이도**: 기초~중급
+**핵심 키워드**: JDK Dynamic Proxy(인터페이스 기반, 대리인 계약), CGLIB(상속 기반, 자식 위장), Spring Boot 기본 CGLIB, final 클래스/메서드 제약, 기본 생성자 필요, self-invocation 문제
+
+**JDK Dynamic Proxy**:
+- 조건: 대상 클래스가 반드시 인터페이스를 구현해야 함
+- 동작: 인터페이스의 프록시 구현체를 런타임에 동적 생성 (대리인 계약)
+- 메서드 호출 → 프록시 → InvocationHandler → 어드바이스 → 실제 메서드
+
+**CGLIB**:
+- 조건: 인터페이스 불필요, 클래스만 있으면 됨
+- 동작: 바이트코드 조작으로 대상 클래스의 자식 클래스 생성 (자식 위장)
+- 제약: `final` 클래스/메서드 프록시 불가 (자식이 override 못함), 기본 생성자 필요 (JPA `@Entity` 연결 이유)
+
+**Spring Boot 기본 CGLIB**:
+- Spring Boot 2.0부터 인터페이스 여부와 무관하게 CGLIB 기본 선택
+- 이유: 인터페이스 없는 클래스에도 `@Transactional` 적용 가능하게, 개발자 혼란 감소
+
+**self-invocation 문제**:
+- 같은 Bean 내부에서 AOP 적용 메서드를 `this.method()`로 호출하면 프록시를 거치지 않음
+- 해결: 해당 메서드를 별도 Bean으로 분리하거나 `AopContext.currentProxy()` 사용
+
+**면접 세션 피드백 (2026-05-05)**:
+- 핵심 암기: "JDK = 대리인 계약(인터페이스 필요), CGLIB = 자식 위장(상속, final 불가)"
+- Spring Boot 기본값이 CGLIB인 이유와 self-invocation 주의사항 연결
+
+---
+
+## Java 버전별 주요 기능을 설명해주세요 (8 / 11 / 17 / 21 / 25)
+
+**난이도**: 기초
+
+**핵심 키워드**: Lambda, Stream API, java.time, HttpClient, Sealed Class, Record, Pattern Matching, Virtual Thread, Compact Object Headers, LTS 주기
+
+**버전별 핵심 변화 요약**:
+
+| 버전 | 출시 | LTS | 핵심 |
+|---|---|---|---|
+| Java 8 | 2014.03 | - | Lambda, Stream API, Optional, java.time, PermGen→Metaspace |
+| Java 11 | 2018.09 | ✅ | var in lambda, HttpClient, Java EE 제거 |
+| Java 17 | 2021.09 | ✅ | Sealed Class, Record, Pattern Matching 정식화. Spring Boot 3.x 최소 요건. |
+| Java 21 | 2023.09 | ✅ | Virtual Thread(Project Loom) 정식, Structured Concurrency, Record Patterns |
+| Java 25 | 2025.09 | ✅ | Compact Object Headers, Generational Shenandoah, Virtual Thread pinning 해결, Structured Concurrency 정식화 |
+
+> 2026년 5월 기준 최신 LTS: **Java 25** (지원 기간 ~2033년)
+> Java 21 지원 종료: 2026년 9월 — 신규 프로젝트는 Java 25 권장
+
+**Virtual Thread vs Platform Thread**:
+- Platform Thread: OS 스레드와 1:1 매핑. 생성 비용 높음, 스레드 수 수천 개 한계
+- Virtual Thread: JVM이 관리하는 경량 스레드. OS 스레드 수십 개로 수백만 Virtual Thread 실행 가능
+- I/O 대기 중 Virtual Thread는 OS 스레드를 반납하고 다른 Virtual Thread가 점유 → 스레드 자원 낭비 없음
+- Java 21에서 pinning 문제 존재 → Java 25에서 해결 (JEP 491)
+
+**모범 답변 (2513자)**:
+> Java는 버전마다 개발 방식이 크게 바뀌었습니다. Java 8이 가장 큰 전환점인데, Lambda와 Stream API가 생기면서 코드 스타일 자체가 달라졌습니다. 예전에는 리스트에서 조건에 맞는 것만 뽑으려면 for문 돌리고 if문으로 걸러야 했는데, 이제는 .filter().map().collect() 한 줄로 표현할 수 있게 됐습니다. 함수형 프로그래밍이 들어온 거라고 보면 됩니다. Optional과 java.time도 이때 추가돼서 null 처리랑 날짜 처리가 훨씬 편해졌습니다. Java 11은 첫 번째 LTS 버전입니다. isBlank()나 strip() 같은 String 메서드가 추가됐고, HttpClient가 표준 라이브러리에 들어와서 외부 라이브러리 없이 HTTP 요청을 보낼 수 있게 됐습니다. Java 17은 Record랑 Sealed Class가 정식으로 들어온 버전입니다. Record는 DTO를 한 줄로 만들 수 있는 거고, Sealed Class는 상속할 수 있는 클래스를 permits로 딱 정해두는 겁니다. Spring Boot 3.x가 Java 17을 최소 요건으로 지정한 것도 이런 언어 개선 때문입니다. Java 21의 가장 큰 변화는 Virtual Thread입니다. 기존 Platform Thread는 OS 스레드와 1대1로 연결돼 있어서, I/O 기다리는 동안에도 OS 스레드를 계속 붙잡고 있었습니다. OS 스레드는 만들기도 비싸고 수천 개가 한계라서 트래픽이 몰리면 스레드 풀이 금방 찼습니다. Virtual Thread는 Carrier Thread라는 OS 스레드 위에 얹혀서 실행되는 경량 스레드입니다. I/O 대기가 생기면 park()가 호출되면서 Carrier Thread에서 내려오고(unmount), 다른 Virtual Thread가 그 자리를 씁니다. I/O가 끝나면 unpark()로 깨어나서 다시 Carrier Thread에 올라탑니다(mount). 이 덕분에 OS 스레드 몇 개만으로 Virtual Thread 수십만 개를 돌릴 수 있습니다. 주의할 점은 ThreadLocal 남용입니다. ThreadLocal은 스레드마다 독립적인 저장공간을 주는 개념입니다. 사용자 정보나 DB 커넥션을 스레드에 붙여놓고 메서드 파라미터 없이 어디서나 꺼내 쓰는 방식인데, Platform Thread 환경에서는 스레드가 수백 개라 ThreadLocal도 수백 개뿐이라 문제없습니다. 그런데 Virtual Thread는 수십만 개를 동시에 띄울 수 있는데, 각 Virtual Thread가 ThreadLocal을 들고 있으면 메모리가 폭발합니다. 또 ThreadLocal은 스레드가 살아있는 동안 GC가 수거를 못합니다. 스레드 풀처럼 재사용하는 구조라면 이전 요청 데이터가 남아서 다음 요청에 오염될 수도 있습니다. InheritableThreadLocal도 문제인데, 부모 Virtual Thread에서 자식 Virtual Thread를 만들 때 ThreadLocal 값을 전부 복사합니다. Virtual Thread를 대량으로 생성하는 환경에서 이 복사 비용이 쌓이면 성능에 영향을 줍니다. 대안이 Java 21에서 Preview로 들어온 ScopedValue입니다. ScopedValue는 특정 코드 블록 안에서만 살아있고, 블록이 끝나면 바로 GC 대상이 됩니다. ThreadLocal처럼 set()으로 값을 갈아끼우는 게 아니라 불변으로 딱 하나의 값을 바인딩합니다. 자식 Virtual Thread와 값을 공유할 때도 복사 없이 같은 참조를 바라보기 때문에 메모리 효율이 훨씬 좋습니다. Spring Boot 3.2부터는 spring.threads.virtual.enabled=true 하나로 활성화할 수 있습니다. 마지막으로 2026년 5월 기준 최신 LTS는 Java 25입니다. 세 가지가 핵심인데요. 첫 번째는 pinning 문제 해결입니다. Java 21에서 synchronized 블록 안에서 I/O가 생기면 Virtual Thread가 Carrier Thread에 고정돼서 unmount가 안 됐습니다. 그러면 그 Carrier Thread가 I/O 동안 묶여서 다른 Virtual Thread가 못 들어오게 됩니다. 레거시 코드에 synchronized가 많으면 Virtual Thread 써도 의미가 없었는데, Java 25에서 이걸 해결했습니다. 두 번째는 Compact Object Headers입니다. 자바 객체는 실제 데이터 외에 헤더가 붙는데, 이 헤더를 기존 12~16바이트에서 8바이트로 줄였습니다. 서버처럼 객체를 수백만 개 쓰는 환경에서는 힙이 줄고 GC가 덜 돌아서 성능이 올라갑니다. 세 번째는 Structured Concurrency 정식화입니다. 여러 Virtual Thread를 하나의 작업 단위로 묶어서, 하나가 실패하면 나머지가 자동으로 취소되는 구조입니다. 기존 CompletableFuture로 이걸 구현하려면 취소 로직을 직접 다 짜야 했는데 훨씬 간단해졌습니다. Java 21 지원이 2026년 9월에 끝나기 때문에 신규 프로젝트라면 Java 25를 쓰는 게 좋습니다.
+
+**꼬리 질문 예시**:
+- Virtual Thread를 사용할 때 주의해야 할 점은 무엇인가요? (ThreadLocal, synchronized pinning)
+- Java 17이 Spring Boot 3.x의 최소 요건이 된 이유는 무엇인가요?
+- Java 25의 Compact Object Headers는 어떤 성능 개선을 가져오나요?
+
+**면접 세션 피드백 (2026-05-06 2회차 — 4/10)**:
+- Java 8 Lambda/Stream ✅, Java 17 Sealed/Record ✅
+- 취약: Java 11 핵심 기능(HttpClient, Java EE 제거) 미암기, Java 21 Virtual Thread 동작 원리 설명 부족
+- Java 25 LTS 출시 — 기존 답변에 Java 25 포함 필요 (2026년 5월 기준 최신 LTS)
+- 암기 포인트: "Java 21 지원 2026년 9월 종료 → 신규 프로젝트는 Java 25"
+
+> 출처: https://openjdk.org/projects/jdk/25/
+> 출처: https://www.oracle.com/java/technologies/java-se-support-roadmap.html
+> 출처: https://www.baeldung.com/java-25-features
+
+---
+
+## 동기(Synchronous)와 비동기(Asynchronous)의 차이, CompletableFuture vs @Async, I/O bound vs CPU bound
+
+**난이도**: 기초
+
+**핵심 키워드**: 동기/비동기, @Async, ThreadPoolTaskExecutor, CompletableFuture, thenApply, thenCombine, I/O bound, CPU bound, 컨텍스트 스위칭
+
+**모범 답변 (990자)**:
+> 동기는 요청을 보낸 뒤 응답이 올 때까지 해당 스레드가 블로킹됩니다. 비동기는 작업을 별도 스레드에 위임하고 현재 스레드는 바로 다음 작업으로 넘어갑니다. Java에서 비동기를 구현하는 방법은 크게 두 가지입니다. 첫 번째는 Spring @Async입니다. AOP 기반 어노테이션으로, 메서드를 호출하면 Spring이 내부 TaskExecutor에서 스레드를 꺼내 실행합니다. 실무에서는 기본 SimpleAsyncTaskExecutor 대신 ThreadPoolTaskExecutor를 Bean으로 등록해서 스레드풀 크기를 직접 조정합니다. 반환값이 필요하면 CompletableFuture로 반환하고, 필요 없으면 void로 fire-and-forget 방식으로 씁니다. 두 번째는 CompletableFuture입니다. Java 8에 추가된 비동기 API로, 여러 비동기 작업을 체이닝하거나 결합할 수 있습니다. thenApply로 결과 변환, thenCombine으로 두 Future 결과를 합치는 등 파이프라인 구성이 가능합니다. @Async는 Spring 빈에만 적용 가능하고 CompletableFuture는 순수 Java 어디서나 쓸 수 있다는 차이가 있습니다. I/O 바운드 작업에서 @Async가 유리한 이유는 caller 스레드 해방 때문입니다. DB 조회나 외부 API 호출처럼 오래 걸리는 작업을 별도 스레드에 위임하면, caller 스레드는 I/O 완료를 기다리지 않고 다른 요청을 받을 수 있습니다. 단, 작업 스레드는 여전히 I/O 대기 중 블로킹됩니다. 총 스레드 수를 실제로 줄이려면 WebFlux(NIO) 또는 Virtual Thread가 필요합니다. CPU 바운드 작업에서 비동기가 불리한 이유는 CPU는 대기 시간이 없기 때문입니다. 이미지 압축, 암호화 연산은 CPU를 계속 점유합니다. 비동기로 별도 스레드에 넘겨도 그 스레드가 CPU 코어를 써야 합니다. 코어 수 이상으로 스레드를 늘리면 컨텍스트 스위칭 오버헤드만 추가됩니다. CPU 바운드는 스레드 수를 코어 수에 맞추는 것이 핵심이고, 비동기로 스레드를 많이 만든다고 성능이 올라가지 않습니다.
+
+**꼬리 질문 예시**:
+- @Async를 같은 클래스 내에서 this.method()로 호출하면 왜 비동기가 동작하지 않나요?
+- CompletableFuture.allOf()와 thenCombine()의 차이는 무엇인가요?
+- CPU 바운드 작업에서 적절한 스레드 수는 어떻게 정하나요?
+
+> 출처: 2026-05-06 5회차 세션 피드백
+
+---

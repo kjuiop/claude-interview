@@ -269,6 +269,11 @@ related: [redis/concepts, distributed-systems, system-design, kafka]
 - 잘한 점: SET NX PX 원자성 + 단일 스레드 이유, DEL 위험 시나리오 설명
 - 보완: Lua 스크립트 코드 수준으로 암기, TTL watchdog 패턴 숙지
 
+**면접 세션 피드백 (2026-05-03 4회차)**: **8/10**
+- 잘한 점: SETNX+EX 원자적 락, 소유자 검증 필요성, UUID value + Lua 스크립트 원자적 비교-삭제 흐름 완성
+- 보완: Lease Time 짧을 때 → 락 만료 → 중복 실행 위험 구체화. Redisson WatchDog(TTL 자동 갱신) 한 문장 추가
+- 암기 포인트: "Lease Time < 작업 시간 → 락 만료 → 다른 인스턴스 중복 실행. WatchDog로 TTL 자동 갱신 해결"
+
 > 출처: Redis 공식 문서 - https://redis.io/docs/manual/patterns/distributed-locks/
 
 ---
@@ -577,3 +582,52 @@ related: [redis/concepts, distributed-systems, system-design, kafka]
 - 보완: ZRANGE 파라미터가 **인덱스 번호(0-based)**임을 명시. "순위를 검색"이 아닌 "`ZRANGE key 0 9` → 0번째~9번째 = 상위 10개"로 구체적으로 표현.
 
 ---
+
+## Redis Sentinel vs Cluster
+
+**난이도:** 기초
+
+**핵심 키워드:** Sentinel(HA 전용), Cluster(HA+샤딩), 쿼럼, failover 2단계, CRC16, 16384 슬롯, replication offset, 수평 확장
+
+**모범 답변 방향:**
+
+Sentinel은 단일 master + 복수 replica로 HA를 제공합니다. failover는 ① Sentinel 과반수 투표로 failover 시작 결정 → ② replication offset 가장 최신 replica를 새 master로 승격하는 2단계로 진행됩니다. Cluster는 multi-master 구조로 `CRC16(key) % 16384`로 슬롯을 계산해 담당 master 노드로 라우팅합니다. 단일 master 메모리 한계 도달 시 Cluster로 수평 확장합니다. 단순 HA만 필요하면 Sentinel, 용량 확장까지 필요하면 Cluster를 선택합니다.
+
+**꼬리 질문 예시:**
+- Sentinel failover 2단계를 구분해서 설명해주세요.
+- Cluster에서 특정 key가 어느 노드로 라우팅되는지 결정하는 방식은?
+- Sentinel 대신 Cluster를 선택하는 기준은?
+
+**면접 세션 피드백 (2026-05-04 4회차)**: 6/10
+- 잘한 점: Sentinel 구조, Cluster multi-master, 쿼럼 투표, 선택 기준
+- 보완: CRC16 슬롯 라우팅 미언급, Sentinel failover 2단계(쿼럼→offset 기반 선출) 구분 없음
+
+---
+
+## Redis Sorted Set(ZSet)을 활용한 광고 입찰(Bidding) 시스템을 설계해주세요.
+
+**난이도**: 중급
+
+**핵심 키워드**: ZADD, ZREVRANGE, ZREVRANGEBYSCORE, skiplist, score 갱신, ZREM
+
+**모범 답변 (1324자)**:
+
+> Redis Sorted Set은 key, member, score 세 가지 요소로 구성됩니다. member는 고유한 식별자이고, score는 정렬 기준이 되는 실수값입니다. 데이터를 삽입하면 score 기준으로 자동 정렬되어 저장됩니다.
+>
+> 내부적으로는 skiplist와 hash 두 가지 자료구조를 함께 씁니다. hash는 member와 score를 키-값 쌍으로 저장해서 특정 멤버의 score를 O(1)에 바로 꺼낼 수 있게 합니다. skiplist는 정렬된 순서를 유지하면서 범위 탐색을 O(log N)에 처리합니다. skiplist는 여러 층으로 구성된 연결 리스트인데, 도서관 구역 표지판에 비유할 수 있습니다. A~G 구역, H~N 구역처럼 큰 범위로 먼저 좁히고 세부 탐색하는 방식입니다. 위 층에서 큰 점프로 범위를 빠르게 좁히고 아래 층에서 정밀 탐색하기 때문에 데이터가 100만 개여도 탐색 횟수가 log N에 비례합니다. 일반 정렬 배열은 중간에 값을 삽입할 때 뒤 요소를 전부 밀어야 해서 O(N)이지만, skiplist는 포인터만 바꾸면 되므로 O(log N)에 삽입할 수 있습니다.
+>
+> 주요 명령어별 시간복잡도입니다. ZADD는 skiplist에서 삽입 위치를 탐색하므로 O(log N)입니다. 같은 member를 다시 ZADD하면 score가 덮어써지기 때문에, 광고주가 입찰가를 변경할 때 삭제 없이 바로 갱신할 수 있습니다. ZRANGE와 ZREVRANGE는 인덱스 범위로 오름차순·내림차순 조회하며 O(log N + K)입니다. K는 반환하는 결과 개수로, ZREVRANGE bids 0 0처럼 1개만 꺼내면 사실상 O(log N)입니다. ZRANGEBYSCORE와 ZREVRANGEBYSCORE는 score 범위로 필터링 조회합니다. ZSCORE는 hash를 직접 조회하기 때문에 O(1)이고, ZREM은 O(log N)입니다.
+>
+> 광고 입찰 시스템에서 Sorted Set은 매우 자연스러운 구조입니다. ZADD bids {입찰가} {광고주ID}로 광고주별 입찰가를 등록하고, 지면 요청이 들어오면 ZREVRANGE bids 0 0으로 최고 입찰자 1명을 O(log N)에 즉시 조회합니다. 클릭이 발생하면 해당 광고주의 예산을 차감하고, 예산이 소진되면 ZREM으로 제거해 다음 순위 광고주에게 기회가 넘어가는 구조입니다. 이 방식은 RDB에서 SELECT MAX(bid_price)를 매번 실행하는 것보다 훨씬 빠르고, 입찰가 변경도 ZADD 한 번으로 처리되므로 실시간 경쟁 입찰 환경에 최적화된 구조입니다.
+
+**주요 명령어 정리**:
+- `ZADD key score member` — 추가/갱신
+- `ZREVRANGE key 0 0` — 최고 score 1명 조회 (top 1)
+- `ZREVRANGE key 0 N-1` — 상위 N명 조회
+- `ZRANGEBYSCORE key min max` — score 범위 조회
+- `ZREVRANK key member` — 특정 광고주 현재 순위
+- `ZREM key member` — 예산 소진 광고주 제거
+
+**면접 세션 피드백 (2026-05-06 1회차)**: 7/10 (+1 보너스)
+- 잘한 점: member=광고주ID, score=입찰가 매핑, 예산 소진 흐름 설명
+- 보완: ZREVRANGE 0 0 (top 1)을 0 1 (top 2)로 오답. ZADD 갱신 특성 미언급

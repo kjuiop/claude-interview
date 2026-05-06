@@ -152,3 +152,47 @@ Hot-Warm-Cold 아키텍처는 시계열 데이터(로그, 메트릭)가 시간�
 **꼬리 질문 예시**:
 - "primary shard를 몇 개로 설정해야 하나요?" → 단일 샤드 권장 크기 10~50GB, 노드 수 × 1~3배
 - "index와 shard의 관계는?" → index = 논리적 데이터 컨테이너, shard = 물리적 저장 단위
+
+---
+
+## 역인덱스 구조
+
+### Q. Elasticsearch의 역인덱스가 RDB B-Tree 인덱스와 다른 방식으로 텍스트 검색을 빠르게 하는 이유를 설명하고, Analyzer 파이프라인과 Term Dictionary + Posting List 동작 방식을 설명해주세요.
+
+**RDB vs 역인덱스 비교:**
+- RDB LIKE '%검색어%': 접두사 특정 불가 → B-Tree 인덱스 사용 불가 → Full Table Scan
+- 역인덱스: 단어(Term) → 문서 ID 목록(Posting List) 직접 매핑 → Full Scan 없이 O(log N) 검색
+
+**Analyzer 파이프라인 (순서 중요):**
+1. **Character Filter**: HTML 태그, 특수문자, 이모티콘 제거
+2. **Tokenizer**: 공백/언어 규칙 기준으로 의미 있는 토큰 단위 분리
+3. **Token Filter**: 조사 제거, 소문자 변환, 동의어 처리
+
+**Term Dictionary + Posting List:**
+- Term Dictionary: 토큰을 정렬된 형태로 저장 → 이진탐색 O(log N) 조회
+- Posting List: 각 토큰에 연결된 문서 ID 목록 + 빈도(TF) + 위치 정보
+- AND 검색: 여러 토큰의 Posting List를 교집합 연산
+
+**면접 세션 피드백 (2026-05-03 2회차)**:
+- 완벽 답변 10/10. LIKE full scan 한계, Analyzer 3단계, Term Dictionary O(log N) 이진탐색, Posting List 전부 커버.
+
+---
+
+## Shard와 Replica 구조
+
+**난이도**: 기초
+
+**핵심 키워드**: Primary Shard, Replica Shard, 라우팅 공식, hash(routing) % shard수, reindex, 장애 복구, 읽기 처리량
+
+**모범 답변 방향**:
+
+Primary Shard는 실제 데이터를 저장하고 색인을 처리하는 주 단위다. 문서가 색인될 때 `hash(routing) % Primary Shard 수` 공식으로 어느 샤드에 저장될지 결정된다. Replica Shard는 Primary의 완전한 복사본으로 두 가지 역할을 한다. 첫째, 읽기 요청을 Primary와 함께 분산 처리해 처리량을 높인다. 둘째, Primary 노드 장애 시 Replica 중 하나가 자동으로 Primary로 승격되어 데이터 유실 없이 서비스를 유지한다.
+
+**Primary Shard 수를 변경할 수 없는 이유**: 라우팅 공식 `hash(routing) % Primary Shard 수` 때문이다. 수가 바뀌면 기존 문서의 위치가 모두 달라져 조회 불가. 변경하려면 새 인덱스 생성 + reindex 작업 필요. Replica Shard 수는 라우팅 공식에 영향을 주지 않아 언제든 변경 가능.
+
+**노드 장애 시 복구 순서**: Replica → Primary 승격 → 클러스터가 새 Replica를 다른 노드에 자동 생성해 설정된 replica 수 유지.
+
+**설계 기준**: Primary Shard 수는 처음부터 최대 예상 데이터 크기 기준으로 설계. 샤드당 10~50GB 수준 권장.
+
+**면접 세션 피드백 (2026-05-04 1회차)**:
+- "잘 모르겠습니다"로 답변. 완전 미학습 영역 확인. 핵심 3가지(Primary 역할, 변경 불가 이유, Replica 읽기 분산) 집중 암기 필요.

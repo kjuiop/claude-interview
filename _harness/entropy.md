@@ -71,6 +71,13 @@ updated: 2026-04-29
 | 2026-05-02 | 2회차 | K8s readiness probe 파라미터 — failureThreshold·periodSeconds 미암기("모르겠습니다") | `initialDelaySeconds`+`periodSeconds`+`failureThreshold` 3개 세트 암기 필수 |
 | 2026-05-02 | 2회차 | Kafka Rebalancing — LeaveGroup 키워드 미사용, 트리거 주체 대조 미언급(7/10) | max.poll.interval.ms → Consumer 스스로 LeaveGroup 전송. session.timeout.ms → 브로커(Group Coordinator)가 감지. 능동/수동 대조 표현 암기 |
 | 2026-05-02 | 4회차 | ClickHouse ORDER BY Primary Key — sparse index(granule + primary.idx) 개념 미언급(7/10) | "granule 8192행 단위 저장 → 각 granule 첫 번째 행 값을 primary.idx에 기록 → 이진탐색으로 granule 스킵" 흐름 암기 |
+| 2026-05-03 | 1~3회차 | Java G1GC Region 분할 + Garbage First 개념 전혀 모름(5/10) | "Heap을 Region으로 분할, 가비지 많은 Region 우선 수집(Garbage First) → STW 시간 예측 가능" 한 문장 암기 |
+| 2026-05-03 | 3회차 | Kafka auto.offset.reset 동작 조건 전혀 모름 — 꼬리 2회 연속 "잘 모르겠습니다" | "커밋된 오프셋이 없을 때만 동작. 있으면 무시" 암기. 신규 Consumer 그룹 / retention 만료 두 가지 케이스 |
+| 2026-05-03 | 3회차 | ClickHouse ReplacingMergeTree 멱등성 엔진 미암기 — "잘 모르겠습니다" | ReplacingMergeTree: ORDER BY 기준 중복 행 최신 버전 교체, FINAL 키워드로 실시간 중복 제거 |
+| 2026-05-04 | 7회차 | JPA 기본 생성자 — Reflection+CGLIB 연결 전혀 모름(1/10) | `Constructor.newInstance()` → 기본 생성자 필요. CGLIB 서브클래스 `super()` 호출 → protected면 충분, private이면 실패 |
+| 2026-05-04 | 7회차 | @Around proceed() 미호출 오개념 — "AOP 함수가 실행되지 않는다" | 정답: @Around 어드바이스 코드는 실행됨. 원본 메서드만 미실행. 캐시/권한 차단 패턴에 활용 |
+| 2026-05-04 | 7회차 | CGLIB 기본 이유 — ClassCastException 미언급 | 인터페이스 있어도 구체 타입 주입 시 JDK Proxy → ClassCastException. CGLIB 구체 클래스 서브클래스라 안전 |
+| 2026-05-04 | 학습 | WebFlux 전혀 모름(0/10) — 신규 출제 | event loop(CPU 코어 수) / Mono(0~1) Flux(0~N) / blocking 혼용 금지 → topics/system-design/questions.md 저장 완료 |
 
 ---
 

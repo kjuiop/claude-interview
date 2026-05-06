@@ -318,3 +318,58 @@ SELECT * FROM products WHERE category_id = ? AND id < {last_id} ORDER BY id DESC
 - 잘한 점: 4가지 차이 모두 정확. 격리 수준 트레이드오프까지 설명.
 - 보완: Oracle 어필 방법 준비 필요 ("모르겠습니다" 금지). ROWNUM + ORDER BY 주의점 추가 언급 가능.
 - 점수: 7/10 (꼬리 질문 0/2)
+
+---
+
+## Deadlock 감지·방지
+
+**난이도**: 기초
+
+**핵심 키워드**: 순환 대기, X-Lock, 잠금 순서 일관성, Gap Lock, SHOW ENGINE INNODB STATUS, innodb_lock_wait_timeout, innodb_rollback_on_timeout, ERROR 1205
+
+**모범 답변 방향**:
+
+데드락은 두 개 이상의 트랜잭션이 서로가 보유한 락을 기다리는 순환 대기 상태에서 발생한다. 예: 트랜잭션 A가 row1 → row100 순서로 잠그려 하고, 트랜잭션 B가 row100 → row1 순서로 잠그려 할 때 순환 대기 발생.
+
+**예방 전략**:
+1. 잠금 순서 일관성 — 항상 동일한 순서(예: id 오름차순)로 락 획득
+2. 인덱스 설계 — WHERE 조건에 인덱스 없으면 Gap Lock 범위가 넓어져 충돌 가능성 증가
+
+**innodb_lock_wait_timeout**: 락을 **대기 중인** 트랜잭션에 적용. 설정 시간 초과 시 대기 트랜잭션이 `ERROR 1205: Lock wait timeout exceeded` 에러를 받고 롤백. 기본값 50초. 기본적으로 현재 statement만 롤백, 전체 트랜잭션 롤백하려면 `innodb_rollback_on_timeout=ON` 필요. ※ 락을 **보유한** 쪽은 영향 없음.
+
+**데드락 진단**: `SHOW ENGINE INNODB STATUS` — 최근 데드락 발생 시점의 트랜잭션 잠금 정보와 실행 쿼리 확인 가능.
+
+**면접 세션 피드백 (2026-05-04 1회차)**:
+- 잘한 점: 순환 대기 구조, 구체적 시나리오, 일관된 락 순서 예방 전략 정확
+- 오개념: `innodb_lock_wait_timeout` 적용 대상을 "락 보유 쪽"으로 혼동 → 반드시 "대기 중인 쪽" 암기
+- 미언급: SHOW ENGINE INNODB STATUS 진단 방법
+
+---
+
+## EXPLAIN 실행 계획
+
+### Q. MariaDB에서 EXPLAIN으로 실행 계획을 확인할 때 type, key, rows, Extra 컬럼이 각각 무엇을 의미하는지 설명해주세요. type 값 중 ALL과 ref의 차이, Extra에서 "Using filesort"와 "Using index"가 표시될 때 각각 어떤 의미인지도 설명해주세요.
+
+**난이도**: 기초
+**핵심 키워드**: type(ALL/range/ref/eq_ref/const), key(NULL=인덱스 미적용), possible_keys, rows(추정 스캔 수), Extra(Using index=커버링 인덱스, Using filesort=별도 정렬, Using temporary), 복합 인덱스, 읽기 빈도 기준 인덱스 추가
+
+**type 값 비교**:
+| type | 의미 |
+|---|---|
+| ALL | 풀 테이블 스캔 — 가장 느림 |
+| index | 인덱스 전체 스캔 |
+| range | 인덱스 범위 스캔 (`BETWEEN`, `>`, `<`) |
+| ref | 비유니크 인덱스로 특정 값 조회 |
+| eq_ref | 조인에서 유니크 인덱스 사용 |
+| const | PK/Unique로 정확히 1건 조회 — 가장 빠름 |
+
+**Extra 핵심**:
+- `Using index`: 커버링 인덱스 — 테이블 파일 접근 없이 인덱스만으로 처리
+- `Using filesort`: ORDER BY 인덱스 미적용 → 별도 정렬 작업 발생
+- `Using temporary`: GROUP BY/ORDER BY에 임시 테이블 생성
+
+**인덱스 추가 판단 기준**: type=ALL + rows 과다 → WHERE 조건 + ORDER BY 컬럼 복합 인덱스 추가 검토. 단, 인덱스는 쓰기 성능과 저장 공간 트레이드오프 있으므로 읽기 빈도 높은 컬럼 위주로.
+
+**면접 세션 피드백 (2026-05-05 3회차)**:
+- 잘한 점: type/key/rows/Extra 구분 정확, Using filesort/Using index 의미 정확, 복합 인덱스 방향 올바름
+- 보완: type 세부 단계(range/eq_ref/const) 추가 암기, possible_keys vs key 구분

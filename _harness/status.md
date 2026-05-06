@@ -1,6 +1,6 @@
 ---
 type: harness-status
-updated: 2026-05-02
+updated: 2026-05-05
 ---
 
 # 현재 준비 상태 스냅샷
@@ -41,35 +41,37 @@ updated: 2026-05-02
 | networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
 | mysql | ★★★★☆ | 2026-04-30 | 복합 인덱스 컬럼 순서 7/10 — 등치→범위 원칙·결론 정확. B-Tree 선두 범위 시 이후 컬럼 인덱스 미사용 이유 미언급. 지연 조인 "커버링 인덱스로 처리" 표현 아직 미언급. |
 | redis | ★★★★☆ | 2026-04-10 | Hash vs String 선택 기준 이해. ziplist/listpack 인코딩 임계값(128/64) + Redis 7.4 HEXPIRE 버전 정확도 보완 필요 |
-| kafka | ★★★★☆ | 2026-05-02 | ISR 복습 9/10 ✅ — 리더 포함 오개념 교정, NotEnoughReplicasException 암기 완료. replica.lag.time.max.ms 한 줄 추가 필요(마지막 1점). Rebalancing 7/10 — LeaveGroup 키워드 미사용. |
+| kafka | ★★★★★ | 2026-05-05 | exactly-once 8/10(Consumer 비원자성 표현 보완 필요), Producer 배치 9/10 ✅, Consumer lag 9/10 ✅. auto.offset.reset 동작 조건 별도 확인 필요 |
 | rabbitmq | ★★★★☆ | 2026-04-28 | DLQ 3조건(TTL/NACK+requeue=false/x-max-length) + x-dead-letter-exchange 속성명 + x-death 헤더(count/reason/queue/exchange) 4회 연속 블로킹 드디어 해결 ✅ |
-| clickhouse | ★★★★☆ | 2026-05-02 | 7/10. ORDER BY 블록 스캔 + PARTITION BY 프루닝/DROP 구분 완성. sparse index(granule + primary.idx) 개념이 "Primary Key 역할" 설명 핵심 — 아직 미언급. 선두 컬럼 설계 기준 추가 필요. |
+| clickhouse | ★★★★☆ | 2026-05-05 | ReplacingMergeTree 9/10 ✅(5회차 재출제). FINAL=쿼리 시점 강제 병합·단일 스레드, AggregatingMergeTree, event_id 멱등성 패턴 완성. eventual consistency 표현 추가 연습 필요 |
+| mysql | ★★★★★ | 2026-05-05 | EXPLAIN type/key/rows/Extra 9/10 ✅. type 세부 단계(range/eq_ref/const) 추가 암기 필요 |
 | java/spring-batch | ★★★★☆ | 2026-05-02 | faultTolerant skip/retry 코드 패턴 9/10 ✅. skip=영구오류/retry=일시오류 케이스 구분 완성. "재처리 범위가 커진다" 표현 추가 연습 필요. |
 | kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
-| kubernetes | ★★★★☆ | 2026-05-02 | 배포 전략 복습 9/10 ✅ — ArgoCD GitOps(Git SSOT+diff+sync) 교정 완료. readiness probe failureThreshold + periodSeconds 2개 추가 명시 필요(마지막 1점). HPA 6/10 — stabilizationWindowSeconds vs PDB 혼동. |
-| zookeeper | ★★★★☆ | 2026-04-01 | ephemeral/Watch 이력서 연결 강점. Watch 1회성 특성 추가 필요 |
+| kubernetes | ★★★★☆ | 2026-05-03 | readiness/liveness/startupProbe 구분 완성 ✅(NotReady vs 재시작 vs CrashLoopBackOff). HPA 8/10 — 공식 ×100 오류 교정, PDB voluntary disruption(배포 포함) 꼬리 후 교정 완료. desiredReplicas 공식 정확한 표현 추가 연습 필요. |
+| zookeeper | ★★★★★ | 2026-05-06 | Watch 1회성 + reporter 재등록 완성 ✅. 트랜스코더 Event-Driven 경험 9/10 |
+| java/async | ★★☆☆☆ | 2026-05-06 | @Async ThreadPoolTaskExecutor·CompletableFuture 체이닝(thenApply/thenCombine)·I/O vs CPU bound 이유 미암기 (2/10 → 재출제 필요) |
 | distributed-systems | ★★★☆☆ | 2026-04-12 | 2PC 전혀 모름 — Phase 1/2 흐름, Blocking 원인, 3PC 차이 암기 필요. Saga 선택 이유 방향은 알고 있음 |
 | elasticsearch | ★★★★☆ | 2026-04-28 | Analyzer 3단계 7/10 해결. Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 추가 암기 필요 |
 | postgresql | ★★★☆☆ | 2026-04-28 | MVCC/Dead Tuple/VACUUM 6/10. XID Wraparound(32비트 트랜잭션 ID 한계, 쓰기 전면 차단) 개념 인지. xmin/xmax 내부 구조 추가 학습 필요 |
-| java/spring | ★★★★★ | 2026-04-29 | AOP/프록시/Reflection 개념 완전 정리. JDK Dynamic Proxy vs CGLIB 메커니즘, Reflection 동작 원리(Class 객체·힙), @Retention RUNTIME, JPA 기본 생성자 이유까지 연결 완료 |
+| java/spring | ★★★★☆ | 2026-05-05 | @Transactional 9/10 ✅(suspend 표현 추가 필요). 멀티 모듈 7/10 — Gradle implementation vs api 전이 의존성 미암기. WebFlux 6/10 — "I/O 완료 콜백 재개" 표현 + R2DBC 미언급 반복 |
 
 ---
 
 ## 다음 우선순위
 
-1. `clickhouse` — MergeTree ORDER BY = Primary Key 역할, PARTITION BY 파티션 프루닝, DROP PARTITION 세 가지 암기 필수 (1/10 → 면접 당일 최우선)
-2. `kafka/ISR` — ISR 정의(replica.lag.time.max.ms 기준 집합), min.insync.replicas 미달 → NotEnoughReplicasException(쓰기 차단) 암기 (5/10)
-3. `java/spring-batch` — faultTolerant().skip/retry 코드 패턴 암기. chunk 트레이드오프 커밋횟수/재처리범위 표현 정착 (7/10)
-4. `java/ConcurrentHashMap` — 버킷=배열 슬롯 표현 정착, $sum: 1 카운트 구분 (복습 6/10, 버킷 오류 있음)
+1. `java/async` — @Async(ThreadPoolTaskExecutor) vs CompletableFuture(thenApply/thenCombine) 차이, I/O bound vs CPU bound 이유 암기 (2/10 → 재출제 최우선)
+2. `java/concepts` — 싱글톤 thread-safe 3가지: synchronized(성능 낭비)→double-checked locking+volatile→enum(가장 안전) 암기 (4/10 → 재출제 필요)
+3. `kafka/offset` — auto.offset.reset 동작 조건 암기("커밋된 오프셋 없을 때만 — 신규 CG / Retention 만료 2케이스"), commitSync vs commitAsync 선택 기준 (2/10 → 재출제 최우선)
+4. `java/GC` — G1GC Region 분할 + "Garbage First = 가비지 많은 Region 우선 수집 → STW 예측 가능" 한 문장 암기 (7/10 → 재출제 필요)
+5. `java/spring` — Gradle implementation vs api 전이 의존성 암기 (7/10 → 보완)
+4. `clickhouse` — eventual consistency 표현 추가 연습 (9/10 → 마무리)
+6. `kubernetes/HPA` — desiredReplicas 공식 정확한 표현(×100 없음), PDB minAvailable/maxUnavailable 설정 형태 암기 (8/10)
 5. `mongodb` — $sum: 1(카운트) vs $sum: "$field"(합산) 구분, _id: "$category" 형태 (5/10 → 재복습 필요)
-6. `kubernetes/HPA` — stabilizationWindowSeconds "가장 높은 값 선택" 표현 정착 + desiredReplicas 공식 암기 (6/10)
-7. `mysql` — 복합 인덱스 B-Tree 원리 한 문장(선두 범위 시 이후 컬럼 인덱스 미사용), 지연 조인 "커버링 인덱스로 처리" 표현 추가
-6. `java/STOMP` — 이력서(카테노이드 채팅 서버) 연결 연습. 내용은 9/10 해결 ✅
-7. `elasticsearch` — Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 상세 암기
-8. `postgresql` — xmin/xmax 내부 구조, XID Wraparound freeze 동작 상세
-9. `ai-stt/Hallucination` — Temperature·Chain-of-Thought·Re-ranking 3가지 미언급. 이력서(STT→RAG) 연결 훈련 필요
-10. `java/Reflection+Proxy` — 오늘 학습 완료. AOP 답변에서 Weaving·Pointcut 용어 자연스럽게 연결 연습 필요
-11. `distributed-systems` — 멱등키 구현 패턴(Idempotency-Key + Redis TTL) 코드 수준 암기
+6. `java/spring-batch` — faultTolerant().skip/retry 코드 패턴 정착 (9/10)
+7. `mysql` — 복합 인덱스 범위 이후 컬럼 인덱스 미사용 표현 정착 (9/10, 마지막 1점)
+8. `elasticsearch` — Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 완성 ✅(10/10)
+9. `postgresql` — xmin/xmax 내부 구조, XID Wraparound freeze 동작 상세
+10. `distributed-systems` — 멱등키 구현 패턴(Idempotency-Key + Redis TTL) 코드 수준 암기
 
 ---
 
@@ -82,7 +84,7 @@ updated: 2026-05-02
 | 인포뱅크 | 7 | 2026-04-28 세션 — @Transactional NESTED 7/10(영속성 컨텍스트 불일치 원인 추가 필요), WebSocket/STOMP 5/10(@SendTo 역할 오해), FastAPI Depends() 5/10(요청 스코프 격리 미언급), RabbitMQ DLQ 9/10 ✅ 드디어 해결 |
 | 채널톡 | 4 | 2026-04-21 불합격. archived |
 | 버즈니 | 3 | 2026-04-28 세션 — ES Analyzer 7/10, Kafka Exactly-Once 10/10 ✅, Redis pub/sub 9/10 |
-| 인라이플 | 15 | 2026-05-02 11회차 — Spring Batch faultTolerant 9/10 ✅, DB 무중단 마이그레이션 10/10 ✅, Redis Sorted Set 9/10, K8s ArgoCD GitOps 7/10(선택 이유+readiness 파라미터 보완), Kafka Rebalancing 7/10(LeaveGroup 키워드), ClickHouse ORDER BY sparse index 7/10 |
+| 인라이플 | 35 | 2026-05-06 5회차 — 트랜스코더 Event-Driven 9+1/10 ✅(ZooKeeper ephemeral node·Watch 재등록·disable node·Kafka 미선택 이유 완성), 동기/비동기 2/10(@Async ThreadPoolTaskExecutor·CompletableFuture 미암기), 운영 장애 대응 10+1/10 ✅(k6 재현·WebSocket 원인 특정·재발방지 완성) |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---
