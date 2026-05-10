@@ -274,6 +274,11 @@ related: [redis/concepts, distributed-systems, system-design, kafka]
 - 보완: Lease Time 짧을 때 → 락 만료 → 중복 실행 위험 구체화. Redisson WatchDog(TTL 자동 갱신) 한 문장 추가
 - 암기 포인트: "Lease Time < 작업 시간 → 락 만료 → 다른 인스턴스 중복 실행. WatchDog로 TTL 자동 갱신 해결"
 
+**면접 세션 피드백 (2026-05-10 모비두)**: **6/10**
+- 잘한 점: SET NX EX 원자성 이유(SET+EXPIRE 분리 시 TTL 미설정 위험), 고유 ID value로 소유자 구분, Lua 스크립트로 소유자 확인 후 해제, 라이브 방송 재고 차감 시나리오 연결
+- 보완: **Redlock 미암기** — 단일 Redis Primary 장애 → Failover 시 Replica에 키 미복제 → 두 요청 동시 락 획득 가능. Redlock = 독립 인스턴스 N개(보통 5개)에 동시 SET NX EX → 과반수(N/2+1) 획득 시 유효 락으로 인정
+- 암기 포인트: "단일 Redis Failover 취약점 → Redlock으로 보완. 독립 N개 과반수 획득. 단, 운영 복잡도 높아 대부분 단일 Redis+재시도로 충분"
+
 > 출처: Redis 공식 문서 - https://redis.io/docs/manual/patterns/distributed-locks/
 
 ---

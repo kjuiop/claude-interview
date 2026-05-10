@@ -539,3 +539,84 @@ Spring Boot 3.x가 Java 17 최소 요건인 이유: Record + Sealed Class + 보�
 **면접 세션 피드백 (2026-05-06 2회차)**: 4/10
 - 잘한 점: Virtual Thread 경량 스레드 + I/O 블로킹 해결 방향 파악
 - 취약: Java 11·17 변화 전혀 모름. 버전별 한 줄 요약 암기 필요
+
+---
+
+## Vert.x
+
+> 샵라이브 실무 기반 정리 (2026-05-09)
+> 관련 질문: [[topics/java/questions#Vert.x]]
+
+### 기본 구조
+
+- **Event Loop 기반** non-blocking 프레임워크 (Node.js와 동일 철학)
+- 비동기 I/O 구현체: **Netty** (Node.js의 libuv 역할)
+  - 네트워크 I/O → OS 비동기 I/O (Linux: **epoll**, macOS: **kqueue**) 위임
+  - 파일 I/O 등 OS async 미지원 → **libuv 내부 스레드풀** (Netty worker thread)
+- Event Loop 스레드 수: **CPU 코어 × 2** → Node.js(1개)와 달리 멀티코어 기본 활용
+
+### Verticle
+
+- 실행 단위. 각 Verticle은 하나의 Event Loop 스레드에 **고정(pinned)**
+- Verticle 내부는 싱글 스레드 보장 → Mutex 없이 상태 관리 가능
+- Go GMP의 P(Processor)와 유사하나, **Work Stealing 없음** — Verticle이 스레드 고정
+- 인스턴스 수 튜닝 기준:
+  - 순서 보장 필요 → **1개**
+  - 일반 처리 → **코어 수**
+  - 요청 폭발적 (입찰 등) → **코어 × 4**
+
+### Event Bus 통신 패턴
+
+| 패턴 | 메서드 | 용도 |
+|---|---|---|
+| Anycast (Request-Reply) | `eventBus.request()` | 단일 응답 필요 (입찰 요청) |
+| Broadcast (Pub-Sub) | `eventBus.publish()` | 모든 서버에 전파 (낙찰 결과) |
+| Local Consumer | `eventBus.localConsumer()` | 동일 JVM 내 통신만 |
+
+### 클러스터 브로드캐스트 구조
+
+```
+publish("broadcast:SESSION:bidReceive", msg)
+    │
+    ├── ZooKeeper: 구독 서버 목록 조회 (레지스트리 역할)
+    │
+    └── Netty raw TCP로 각 서버에 직접 전송
+         (WebSocket X — HTTP 오버헤드 없는 raw TCP)
+         │
+         └── 각 서버의 Verticle → sessionSupervisor.broadcast()
+              → 해당 방송 시청 중인 WebSocket 커넥션에 push
+```
+
+- **ZooKeeper**: 메시지 전달자가 아닌 **구독 레지스트리**
+- **실제 전송**: Netty raw TCP (서버↔서버), WebSocket (서버↔클라이언트)
+
+### 블로킹 코드 처리
+
+```java
+// 방법 1: executeBlocking
+vertx.executeBlocking(() -> jdbcTemplate.query(...))
+     .onSuccess(result -> message.reply(result));
+
+// 방법 2: Worker Verticle 배포
+new DeploymentOptions()
+    .setWorker(true)                    // Worker Thread Pool에서 실행
+    .setWorkerPoolName("WorkerThread")
+    .setWorkerPoolSize(1024);
+```
+
+- `setWorker(true)`: 코드 변경 없이 배포 옵션만으로 Worker Pool 자동 분리
+- Worker Verticle은 **스레드 안전성을 개발자가 책임** (여러 스레드 동시 접근 가능)
+
+### Go / Node.js 비교
+
+| | Node.js | Vert.x | Go |
+|---|---|---|---|
+| Event Loop 스레드 | 1개 | CPU×2 | GMP P 수 (코어 수) |
+| 블로킹 I/O | libuv 스레드풀 위임 | Netty 스레드풀 위임 | 런타임 자동 파킹 |
+| Work Stealing | 없음 | **없음** | **있음** |
+| 블로킹 코드 작성 | executeBlocking 필요 | setWorker 필요 | **그냥 써도 됨** |
+
+### 발전 방향
+
+- **Kotlin Coroutines + Vert.x** (`vertx-lang-kotlin-coroutines`): 콜백 없이 `await()`로 동기 코드처럼 작성, OS 스레드 블로킹 없음 — 현재 성숙한 공식 지원
+- **Java Virtual Thread + Vert.x 5.x**: `setWorker` 분리 없이 블로킹 코드 그대로 사용 가능 — Vert.x 5.x 정식 지원

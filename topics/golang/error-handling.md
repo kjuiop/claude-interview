@@ -240,7 +240,9 @@ func runAll(tasks []Task) error {
 
 **모범 답변 방향**:
 
-`fmt.Errorf("%w")`와 `errors.Join`은 모두 에러를 다루지만 목적이 다릅니다. `fmt.Errorf("%w")`는 단일 에러에 컨텍스트를 추가하는 래핑으로, 호출 스택을 따라 에러를 전파할 때 사용합니다. 반면 `errors.Join`은 Go 1.20에서 도입된 함수로, 독립적인 여러 에러를 하나로 합칠 때 사용합니다. 유효성 검사처럼 여러 필드를 검사해 실패를 모두 수집한 뒤 한 번에 반환해야 하는 상황, 또는 여러 리소스를 정리하다가 일부 실패한 에러를 합산해야 하는 상황에 적합합니다. `errors.Join`이 반환한 에러는 내부적으로 `Unwrap() []error` 메서드를 구현하므로, `errors.Is`와 `errors.As`로 개별 에러를 탐색할 수 있습니다. nil 에러는 자동으로 걸러지므로 `if err != nil` 조건 없이 `errs = append(errs, err)`만 해도 안전하게 수집됩니다. 주의할 점은 `errors.Join`은 에러 메시지 포맷을 직접 제어할 수 없어서 커스텀 포맷이 필요한 경우에는 직접 구현해야 합니다.
+`fmt.Errorf("%w")`와 `errors.Join`은 모두 에러를 다루지만 목적이 다릅니다. `fmt.Errorf("%w")`는 단일 에러에 컨텍스트를 추가하는 래핑으로, 호출 스택을 따라 에러를 전파할 때 사용합니다. Repository에서 `fmt.Errorf("userRepo.FindByID: %w", err)`처럼 함수명을 prefix로 붙여 에러 발생 위치를 추적할 수 있게 하는 방식이 대표적입니다.
+
+반면 `errors.Join`은 Go 1.20에서 도입된 함수로, 독립적인 여러 에러를 하나로 합칠 때 사용합니다. 유효성 검사처럼 여러 필드를 검사해 실패를 모두 수집한 뒤 한 번에 반환해야 하는 상황, 또는 여러 리소스를 정리하다가 일부 실패한 에러를 합산해야 하는 상황에 적합합니다. `errors.Join`이 반환한 에러는 내부적으로 `Unwrap() []error` 메서드를 구현하므로, `errors.Is`와 `errors.As`로 개별 에러를 탐색할 수 있습니다. 즉 `errors.Join(ErrNotFound, ErrPermission)`으로 합친 에러에 대해 `errors.Is(combined, ErrNotFound)`를 호출하면 true가 반환됩니다. nil 에러는 자동으로 걸러지므로 `if err != nil` 조건 없이 `errs = append(errs, err)`만 해도 안전하게 수집됩니다. defer 패턴에서도 유용한데, `defer func() { err = errors.Join(err, f.Close()) }()` 처럼 사용하면 함수 본체 에러와 Close 에러를 모두 호출자에게 전달할 수 있습니다. 두 함수를 선택하는 기준은 단순합니다. 하나의 에러를 컨텍스트와 함께 전파할 때는 `fmt.Errorf("%w")`, 여러 에러를 수집해서 한꺼번에 반환할 때는 `errors.Join`입니다. 주의할 점은 `errors.Join`은 에러 메시지 포맷을 직접 제어할 수 없어서 커스텀 포맷이 필요한 경우에는 `joinError` 같은 타입을 직접 구현하거나, Go 1.20 이전 방식으로 사용되던 `uber-go/multierr` 라이브러리를 고려해야 합니다.
 
 **꼬리 질문 예시**:
 - errors.Join으로 합친 에러에서 특정 에러가 포함됐는지 확인하려면?

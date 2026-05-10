@@ -1045,4 +1045,91 @@ Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논�
 
 > 출처: 2026-05-06 5회차 세션 피드백
 
+**면접 세션 피드백 (2026-05-07 1회차)**:
+- 6/10 (이전 2/10 → 개선 ✅) — caller 스레드 해방 표현, thenApply/thenCombine 키워드 추가 연습 필요
+
+---
+
+## 싱글톤 패턴 thread-safe 구현 (synchronized → DCL+volatile → enum)
+
+**난이도**: 기초
+
+**핵심 키워드**: synchronized 성능 낭비, double-checked locking, volatile(명령어 재배열 방지), enum(직렬화·리플렉션 공격 방어), Spring Bean 무상태 설계
+
+**모범 답변 (885자)**:
+> 싱글톤 패턴은 애플리케이션 전체에서 인스턴스를 단 하나만 생성하고 그 인스턴스를 공유해서 사용하는 디자인 패턴입니다. 가장 직관적인 구현은 synchronized 키워드를 getInstance() 메서드 전체에 붙이는 방식인데, 이 경우 인스턴스가 이미 생성된 이후에도 매번 synchronized 구문을 거쳐야 해서 불필요한 성능 낭비가 생깁니다. 이를 개선한 것이 Double-Checked Locking입니다. 인스턴스가 null인지 먼저 체크하고, null일 때만 synchronized 블록에 진입해서 다시 한 번 null 체크 후 생성합니다. 여기서 volatile 키워드가 반드시 필요합니다. volatile이 없으면 JVM이 명령어 순서를 바꿀 수 있어서, 객체가 완전히 초기화되기 전에 참조가 반환될 수 있습니다. volatile은 메인 메모리에서 직접 읽도록 강제하고, 명령어 재배열을 방지해서 이 문제를 막습니다. 가장 안전한 구현은 enum입니다. JVM이 enum 상수를 단 하나만 생성하도록 보장하기 때문에 synchronized나 volatile 없이도 thread-safe합니다. 또한 Java 직렬화/역직렬화 시 새 인스턴스가 생성되는 문제와 리플렉션으로 private 생성자를 강제 호출하는 공격에도 안전합니다. synchronized나 DCL 방식은 이 두 가지 공격에 취약합니다. Spring Bean이 싱글톤으로 관리될 때는 상태값을 가지지 않도록 설계해야 합니다. 싱글톤 Bean은 애플리케이션 전체에서 하나의 인스턴스를 여러 요청이 공유하기 때문에, 만약 인스턴스 변수로 상태를 저장하면 요청 A가 변경한 상태가 요청 B에 영향을 줄 수 있습니다. 상태가 필요하다면 request 스코프 Bean이나 ThreadLocal을 활용해야 합니다.
+
+**꼬리 질문 예시**:
+- double-checked locking에서 volatile 키워드를 붙여야 하는 이유는 무엇인가요?
+- enum 싱글톤이 직렬화·리플렉션 공격에 안전한 이유는 무엇인가요?
+- Spring Bean 싱글톤에서 상태값을 가지면 어떤 문제가 생기나요?
+
+**면접 세션 피드백 (2026-05-07 1회차)**:
+- 7/10 — synchronized→DCL→enum 발전 흐름 정확. volatile 메인메모리 접근 맞음. 보완: volatile의 명령어 재배열 방지 역할, enum의 직렬화·리플렉션 공격 방어 추가 필요
+
+> 출처: 2026-05-07 1회차 세션
+
+---
+
+## Vert.x
+
+> 관련 개념: [[topics/java/concepts#Vert.x]]
+> 출처: 2026-05-09 샵라이브 코드 기반 정리
+
+---
+
+### Q1. Node.js와 Vert.x는 둘 다 Event Loop 기반이라고 하는데, 내부적으로 어떻게 non-blocking I/O를 처리하는지 설명해주세요. Vert.x를 실무에서 사용한 경험이 있다면 어떤 구조로 설계했는지도 함께 설명해주세요.
+
+**핵심 키워드**: libuv(Netty), epoll/kqueue, Verticle 스레드 고정, Event Bus(Anycast/Broadcast), ZooKeeper 레지스트리 + raw TCP, setWorker 블로킹 분리, 인스턴스 수 튜닝, Kotlin Coroutines / Virtual Thread
+
+**모범 답변 방향**:
+1. Vert.x = Node.js와 동일한 Event Loop 철학, 구현체는 Netty
+2. 네트워크 I/O → epoll/kqueue, 파일 I/O → Netty 내부 스레드풀
+3. Node.js 차이: Event Loop 스레드가 CPU 코어 × 2 → 멀티코어 기본 활용
+4. Verticle = 하나의 Event Loop 스레드에 고정 → 싱글 스레드 보장, Mutex 불필요
+5. Event Bus: Anycast(Request-Reply) vs Broadcast(Pub-Sub) 구분
+6. 서버 간 브로드캐스트: ZooKeeper(구독 레지스트리) + Netty raw TCP(실제 전송)
+7. 블로킹 코드: setWorker(true)로 Worker Pool 자동 분리, 인스턴스 수 워크로드별 튜닝
+8. 발전 방향: Kotlin Coroutines(현재 성숙), Virtual Thread(Vert.x 5.x)
+
+**꼬리 질문 예시**:
+- Vert.x Event Loop와 Go GMP 스케줄러의 차이는 무엇인가요?
+- 서버 간 브로드캐스트에서 ZooKeeper가 실제로 하는 역할은 무엇인가요?
+- Vert.x에서 블로킹 코드를 Event Loop에서 실행하면 어떤 문제가 생기나요?
+- Kotlin Coroutines와 Virtual Thread 중 어떤 상황에서 각각을 선택하시겠어요?
+
+**Go와의 핵심 차이 (면접 연결 포인트)**:
+- Go: Work Stealing + 런타임 자동 파킹 → 개발자가 블로킹 신경 안 써도 됨
+- Vert.x: Verticle 스레드 고정(Work Stealing 없음) → 블로킹 코드는 개발자가 직접 분리
+- 공통: 결국 epoll → OS 비동기 I/O로 귀결
+
+---
+
+## Java 동시성 제어
+
+### Q. Java에서 멀티스레드 환경의 동시성 문제를 해결하는 방법들을 설명하고, ReentrantLock을 synchronized 대신 선택하는 기준을 설명해주세요.
+
+**난이도:** 기초
+
+**핵심 키워드:** synchronized 자동 락, volatile 가시성 + 명령어 재배치 방지, ReentrantLock tryLock(timeout), lockInterruptibly, ConcurrentHashMap 버킷 단위 CAS + 읽기 무락, synchronizedMap 전체 락
+
+**모범 답변 방향:**
+
+1. **synchronized**: 모니터 락 자동 획득/해제. 예외 시에도 자동 해제. 단, 타임아웃/인터럽트 처리 불가, 락 실패 시 무한 대기.
+2. **volatile**: 메인 메모리 직접 읽기/쓰기 강제 + 명령어 재배치 방지 → 가시성 해결. 복합 연산(i++) 원자성은 미보장 → AtomicInteger 필요.
+3. **ReentrantLock 선택 기준**: 무한 대기를 피해야 할 때 → `tryLock(timeout, TimeUnit)`으로 획득 실패 시 포기 후 별도 처리. 대기 중 인터럽트 허용이 필요할 때 → `lockInterruptibly()`.
+   - 실무 예: 라이브 방송 재고 차감에서 타임아웃 후 "재고 소진" 응답 즉시 반환.
+4. **ConcurrentHashMap vs synchronizedMap**:
+   - ConcurrentHashMap: 버킷 단위 CAS + 읽기 무락 → 동시 읽기 처리량 높음.
+   - synchronizedMap: 전체 맵 락 → 읽기도 직렬화. 읽기 많은 캐시성 자료구조에 부적합.
+
+**꼬리 질문 예시:**
+- ReentrantLock을 synchronized 대신 선택하는 구체적인 상황은 무엇인가요?
+- volatile이 복합 연산의 원자성을 보장하지 못하는 이유는 무엇인가요?
+
+**면접 세션 피드백 (2026-05-10 2회차):**
+- synchronized/volatile/ConcurrentHashMap 핵심 구조는 정확히 설명
+- ReentrantLock 선택 기준(tryLock timeout + lockInterruptibly) 미암기 — 재출제 필요 (5/10)
+- 보완 필수: "무한 대기를 피해야 하는 경우 → ReentrantLock, 타임아웃 후 별도 처리 필요 → tryLock()" 한 문장 암기
+
 ---
