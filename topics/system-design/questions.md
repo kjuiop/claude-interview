@@ -179,6 +179,19 @@ public OtaResponse otaFallback(String partnerId, Exception e) {
 }
 ```
 
+**Exponential Backoff with Jitter — Thundering Herd 방지:**
+- Circuit이 Open → Half-Open으로 전환될 때, 대기 중이던 모든 클라이언트가 동시에 시험 요청을 보내면 Thundering Herd(떼 몰림) 현상 발생
+- Exponential Backoff: 재시도 간격을 1s → 2s → 4s로 지수적으로 증가시켜 요청 분산
+- **+ Jitter(난수 지연):** 각 클라이언트의 재시도 시점에 랜덤 지연을 추가해 동시 재시도를 시간적으로 분산 → Thundering Herd 방지의 핵심
+- 공식: `delay = min(base * 2^attempt + random(0, jitter_max), max_delay)`
+
+**Graceful Degradation — Open 상태 Fallback 전략:**
+- Circuit Open 시 외부 API 호출 없이 즉시 대체 응답을 반환해 사용자 경험 유지
+- 캐시된 데이터 반환: 이전에 성공한 응답을 Redis/로컬 캐시에서 제공 (stale하지만 없는 것보다 나음)
+- 임시 주문 저장: 요청을 [[topics/kafka/concepts|Kafka]]/DB 큐에 저장하고 복구 후 처리 ("주문이 접수되었습니다. 확인까지 N분 소요")
+- 안내 메시지: "일시적으로 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요"
+- 핵심 원칙: 전체 서비스 장애보다 부분적 기능 저하(degradation)가 항상 나은 선택
+
 **추가 운영 포인트:**
 - 실패 이력 저장: REQUIRES_NEW 별도 트랜잭션으로 API·예외유형·빈도 추적
 - 알람: 실패 2회 이상 → 개발자 알림 (CloudWatch, Slack 등)
@@ -294,6 +307,59 @@ REST API 설계 원칙의 핵심은 URI와 HTTP 메서드의 역할을 명확히
 **면접 세션 피드백 (2026-05-06 2회차)**: 8/10
 - 잘한 점: URI 명사/메서드 동사 원칙을 예시와 함께 명확히 설명. GET/POST/PATCH/PUT/DELETE 역할 정확 매핑.
 - 보완: 상태코드 기준 한 문장 추가 필요
+
+---
+
+## Socket.io vs pure WebSocket
+
+### Q. Socket.io가 pure WebSocket과 다른 이유를 설명해주세요. HTTP long-polling fallback 이유, namespace와 room의 역할, sticky session이 필요한 이유를 포함해서 설명해주세요.
+
+**난이도:** 기초
+
+**핵심 키워드:** HTTP long-polling fallback, WebSocket upgrade, namespace, room, sticky session, 방화벽/프록시 호환
+
+**모범 답변 방향:**
+
+Socket.io는 pure WebSocket과 달리 처음부터 WebSocket으로 연결하지 않고 HTTP long-polling으로 먼저 연결을 확보한 뒤 WebSocket으로 업그레이드를 시도합니다. 이렇게 하는 이유는 기업 방화벽이나 프록시 서버가 WebSocket 프로토콜을 차단하는 환경이 여전히 존재하기 때문입니다. long-polling으로 먼저 연결하면 어떤 네트워크 환경에서도 통신이 끊기지 않고, 이후 WebSocket이 가능한 환경이면 자동으로 업그레이드해서 성능을 높이는 전략입니다.
+
+이 long-polling 방식 때문에 sticky session이 필수적입니다. long-polling은 하나의 연결을 유지하는 것이 아니라 여러 번의 HTTP 요청을 반복하는 방식이라, 로드밸런서가 각 요청을 다른 서버로 분산하면 세션 상태가 공유되지 않아 연결이 끊어지거나 WebSocket 업그레이드가 실패합니다. 반면 pure WebSocket은 최초 HTTP 요청 하나로 upgrade 핸드셰이크를 완료한 뒤 단일 TCP 연결을 유지하므로, 이후 요청이 다른 서버로 갈 일이 없어 sticky session이 필요 없습니다.
+
+Socket.io는 namespace와 room이라는 논리적 분리 개념도 제공합니다. namespace는 하나의 서버에서 연결을 용도별로 분리하는 단위입니다(예: /chat, /notification). room은 namespace 안에서 특정 사용자 그룹에게만 메시지를 보내는 브로드캐스트 단위입니다(예: 채팅방별 room). to(roomId).emit()으로 특정 그룹에만 이벤트를 전달합니다.
+
+**꼬리 질문 예시:**
+- Socket.io에서 namespace와 room을 각각 어떤 상황에서 사용하나요?
+- Socket.io가 처음부터 WebSocket으로 연결하지 않는 이유는?
+
+**면접 세션 피드백 (2026-05-11 2회차):**
+- sticky session 이유 정확 설명 ✅
+- long-polling fallback 이유(방화벽/프록시 호환) 미언급 ❌
+- namespace/room 개념 모름 ❌ → 암기 필요
+
+**면접 세션 피드백 (2026-05-12 1회차):**
+- 8/10 (이전 4/10 → 개선 ✅) — namespace/room 정확 설명, long-polling 기본 전략 꼬리에서 교정
+- 남은 보완: sticky session 메커니즘 "여러 HTTP 요청이 다른 서버로 분산" 명시적 표현 연습
+
+---
+
+## 트래픽 스파이크 아키텍처 (라이브 방송)
+
+### Q. 라이브 방송 시작 직후 동시 시청자가 급격히 증가하는 트래픽 스파이크 상황에서 백엔드 아키텍처를 어떻게 설계할지 설명해주세요.
+
+**난이도:** 중급
+
+**핵심 키워드:** WebSocket 수평 확장, sticky session, Redis pub/sub 브로드캐스트, Master-Read Replica, HPA stabilizationWindowSeconds, terminationGracePeriodSeconds, preStop hook, exponential backoff with jitter, reconnection storm
+
+**모범 답변 방향:**
+
+라이브 방송 시작 직후 트래픽 스파이크는 크게 네 계층으로 대응 설계합니다. 첫 번째는 WebSocket 서버 수평 확장입니다. Socket.io를 사용하는 경우 HTTP long-polling 연결이 여러 번 발생하므로 round-robin 로드밸런서에서는 세션 상태가 공유되지 않아 연결이 끊깁니다. 따라서 sticky session(IP hash 또는 쿠키 기반)이 필수이며, Kubernetes HPA를 active connection 수와 CPU 기준으로 설정해 트래픽 급증에 자동으로 스케일아웃합니다. 두 번째는 Redis pub/sub으로 크로스서버 브로드캐스트를 처리합니다. 채팅방마다 Redis 채널을 하나씩 할당하고, 각 서버가 해당 채널을 구독하면 어느 서버에 연결된 사용자든 동일한 채팅 메시지를 받을 수 있습니다. 서버는 메시지를 수신하면 자신에게 연결된 WebSocket 클라이언트에게만 forward합니다. 세 번째는 DB 읽기 부하 분산입니다. 방송 시작 직후 채팅방 정보나 최근 메시지 조회가 집중되므로 Read Replica로 읽기 트래픽을 분산하고, 자주 조회되는 데이터는 Redis에 캐싱해 DB 부하를 줄입니다. 네 번째는 스케일 인 시 graceful 처리입니다. Pod 제거 시 연결된 WebSocket이 갑자기 끊기지 않도록 terminationGracePeriodSeconds를 충분히 길게 설정하고, preStop hook에서 신규 연결을 먼저 차단한 뒤 기존 세션이 자연스럽게 드레인되도록 합니다. 스케일 인 시 너무 빠른 축소를 막기 위해 stabilizationWindowSeconds 값도 넉넉히 설정합니다. 클라이언트 측에서는 재연결 시 exponential backoff with jitter를 적용해 모든 클라이언트가 동시에 재연결을 시도하는 reconnection storm을 방지합니다. 샵라이브에서 라이브 커머스 방송을 운영할 때 방송 시작과 동시에 시청자가 급격히 증가하는 패턴을 경험했고, 이 네 계층의 설계가 실시간 서비스 안정성의 핵심임을 실감했습니다.
+
+**꼬리 질문 예시:**
+- Pod 제거 시 WebSocket 클라이언트 graceful 처리 방법?
+- 재연결 폭증(reconnection storm)을 방지하는 방법?
+
+**면접 세션 피드백 (2026-05-12 1회차)**:
+- 8/10 — 4개 계층 모두 커버 ✅, stabilizationWindowSeconds ✅, preStop hook ✅, reconnection storm + jitter ✅
+- 남은 보완: "exponential backoff with jitter" 정확한 용어 사용, 이력서 경험(카테노이드 라이브 채팅) 연결
 
 ---
 

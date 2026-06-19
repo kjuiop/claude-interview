@@ -264,6 +264,103 @@ con.rollback();
 
 ---
 
+## POJO vs EJB
+
+### POJO란?
+
+**Plain Old Java Object** — 특정 프레임워크에 종속되지 않은 순수 Java 객체.
+
+Martin Fowler가 2000년에 EJB의 복잡한 규약을 비판하며 만든 용어. "그냥 평범한 Java 객체를 쓰면 안 되냐"는 문제 제기에서 시작.
+
+```java
+// POJO — 아무것도 상속/구현 안 함
+public class User {
+    private String name;
+    private int age;
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+}
+```
+
+**POJO 조건:**
+- 특정 클래스 상속 안 함
+- 특정 인터페이스 구현 안 함
+- 특정 어노테이션 강제 안 함
+
+### EJB의 문제
+
+```java
+// EJB 방식 — 프레임워크에 완전히 종속
+public class OrderServiceBean implements SessionBean {
+
+    private SessionContext ctx;
+
+    // 비즈니스 로직과 무관한 생명주기 메서드 강제 구현
+    public void ejbCreate() {}
+    public void ejbRemove() {}
+    public void ejbActivate() {}
+    public void ejbPassivate() {}
+    public void setSessionContext(SessionContext ctx) { this.ctx = ctx; }
+
+    // 실제 비즈니스 로직은 여기 한 줄
+    public void placeOrder(Order order) { ... }
+}
+```
+
+추가 문제:
+- EJB 컨테이너(WebLogic, JBoss) 없이는 실행 자체 불가
+- 단위 테스트 불가 — 컨테이너 없이는 동작 안 함
+- 코드가 EJB에 완전히 종속 → 다른 프레임워크 이전 불가
+
+### POJO vs EJB 비교
+
+| | EJB | POJO + Spring |
+|---|---|---|
+| 상속/구현 강제 | `implements SessionBean` 필수 | 없음 |
+| 생명주기 메서드 | `ejbCreate`, `ejbRemove` 등 강제 | 없음 |
+| 실행 환경 | EJB 컨테이너 필수 | JVM만 있으면 됨 |
+| 단위 테스트 | 컨테이너 없이 불가 | `new OrderService()`로 바로 테스트 |
+| 트랜잭션 | 컨테이너가 제어 | `@Transactional` AOP로 처리 |
+| 프레임워크 이전 | 거의 불가 | 어노테이션 제거하면 가능 |
+
+### Spring이 POJO를 관리하는 방식
+
+POJO 자체는 아무 기능이 없지만, Spring이 세 가지로 기능을 붙여줌:
+
+```
+POJO (순수 Java 객체)
+    +
+IoC Container  → 객체 생성/주입/생명주기 관리
+    +
+AOP            → 트랜잭션, 로깅, 보안 등 횡단 관심사를 외부에서 씌움
+    +
+PSA            → JDBC, JPA 등 기술을 추상화해서 종속성 차단
+```
+
+```java
+@Service  // 이 어노테이션을 지워도 OrderService 자체는 그냥 Java 클래스
+public class OrderService {
+    private final OrderRepository orderRepository;
+
+    public OrderService(OrderRepository orderRepository) {
+        this.orderRepository = orderRepository;
+    }
+
+    @Transactional
+    public void placeOrder(Order order) {
+        orderRepository.save(order);
+    }
+}
+```
+
+Spring의 핵심 가치: **"POJO를 건드리지 않고 엔터프라이즈 기능을 제공한다"**
+
+> `HttpServlet extends CommonServlet` 같은 코드는 POJO가 아님 — Servlet 스펙에 종속.
+> Spring DispatcherServlet 아래의 Service/Repository 계층이 POJO 철학을 따름.
+
+---
+
 ## 작성 예정
 
 - JVM 구조 & GC

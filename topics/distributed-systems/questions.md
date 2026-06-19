@@ -202,6 +202,15 @@ MSA에서 DB가 서비스별로 분리되면 하나의 비즈니스 로직이 �
 - "Saga에서 동시성 이슈는?" → 다른 트랜잭션이 중간 상태를 읽을 수 있음. Lost Update 방지를 위해 각 서비스에서 낙관적 락 사용.
 - "Orchestrator가 비즈니스 로직을 가지면 안 되는 이유는?" → 모든 서비스가 Orchestrator에 의존하게 되어 단일 장애점이 되고 변경 파급 범위가 커짐.
 
+**Choreography vs Orchestration 선택 기준 — 워크플로우 복잡도:**
+- **단순한 흐름 (서비스 2~3개, 선형)** → Choreography: 각 서비스가 이벤트를 발행하고 다음 서비스가 구독하는 느슨한 결합. 중앙 조정자 없이 자율적.
+- **복잡한 조건 분기 (서비스 5개 이상, 조건부 실행)** → Orchestration: 중앙 Orchestrator가 흐름을 제어. 전체 상태 추적·디버깅·조건 분기 처리가 명확.
+- 판단 기준: "흐름을 그림으로 그렸을 때 한눈에 보이면 Choreography, 흐름도가 필요하면 Orchestration"
+
+**일관성 트레이드오프 요약:**
+- **2PC** = 강한 일관성(Strong Consistency). 전체 트랜잭션 동안 락 유지 → 정합성 보장, 성능·가용성 희생
+- **Saga** = 최종 일관성(Eventual Consistency) + 보상 트랜잭션(Compensating Transaction). 락 없이 서비스별 로컬 트랜잭션 → 성능·가용성 유지, 중간 상태 노출 가능
+
 **면접 세션 피드백 (2026-04-02 1회차)**:
 - 잘한 점: Choreography/Orchestration 구조 정확히 구분. Orchestration 결합도 트레이드오프 명확히 설명. Choreography 단점에 AOP/Observability 해결책까지 제시(시니어 수준).
 - 보완:

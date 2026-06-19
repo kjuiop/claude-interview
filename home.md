@@ -31,6 +31,7 @@ tags: [home, index]
 - [[jobs/infobank-ixpert-ai-product-engineer/job]] — 인포뱅크 iXpert AI Product Engineer (Java/Spring/RabbitMQ/LLM)
 - [[jobs/buzzni-ax-backend/job]] — 버즈니 에이플러스 AX 백엔드 엔지니어 (AI×이커머스 SaaS, LLM/RAG, 홈쇼핑모아)
 - [[jobs/enliple-backend-java/job]] — 인라이플 백엔드 개발자 Java (AD Tech, 라이브방송/데이터파이프라인, ClickHouse/Kafka)
+- [[jobs/watcha-backend-media-encoding/job]] — 왓챠 백엔드 개발자 미디어 인코딩 서비스 (Java/Kotlin, RabbitMQ, AWS, OVP)
 
 ---
 
@@ -78,6 +79,7 @@ tags: [home, index]
 ### Architecture
 - [[topics/distributed-systems/concepts]] / [[topics/distributed-systems/questions]]
 - [[topics/system-design/concepts]] / [[topics/system-design/questions]]
+- [[topics/feature-flag/concepts]] / [[topics/feature-flag/questions]] — 피처 플래그, 점진적 롤아웃, Flag Debt
 
 ### AI / ML
 - [[topics/ai-stt/concepts]] / [[topics/ai-stt/questions]] — Whisper STT, Groq API, video-ai-stt 프로젝트

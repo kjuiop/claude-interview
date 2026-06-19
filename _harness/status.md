@@ -18,7 +18,8 @@ updated: 2026-05-05
 | 넵튠 | 솔루션개발실 백엔드 | 2026-04-10 | 신규 등록 |
 | 인포뱅크 | iXpert AI 프로덕트 엔지니어 | 2026-04-17 | 준비 중 |
 | 채널톡 | Enterprise Solution Engineer (AX팀) | 2026-04-17 | 준비 중 |
-| 인라이플 | 백엔드 개발자(JAVA) | 2026-05-07 | 면접 완료(2026-05-07), 결과 대기 중 |
+| 인라이플 | 백엔드 개발자(JAVA) | 2026-05-13 | 최종 합격 🎉 |
+| 왓챠 | 백엔드 개발자 - 미디어 인코딩 서비스 | 2026-05-13 | 신규 등록 |
 
 ---
 
@@ -37,7 +38,7 @@ updated: 2026-05-05
 | golang/hexagonal | ★★★★★ | 2026-04-12 | In-Memory=stateful, Adapter→Port 방향, DIP 전부 교정 완료 |
 | mongodb | ★★★★☆ | 2026-05-10 | 복습 세션 10/10 ✅. $match~$project MySQL 대응 + `_id: "$field"` $ prefix + `$sum: 1` vs `$sum: "$field"` 구분 완성 |
 | python-fastapi | ★★★★☆ | 2026-04-29 | yield setup/teardown + 요청 스코프 격리 메커니즘 8/10 해결 ✅. "각 요청이 독립된 인스턴스 → 세션 오염 없음 = 요청 스코프" 결론 표현 추가 필요 |
-| java/jpa | ★★★★☆ | 2026-04-01 | fetch join+pagination @BatchSize 해결 정착, @EntityGraph 선언 위치 교정 |
+| java/jpa | ★★★☆☆ | 2026-05-13 | N+1 해결은 정착. 영속성 컨텍스트 3/10 — 쓰기 지연≠지연 로딩 혼동, flush/commit 역전, OSIV 미답변. 재출제 필요 |
 | networking | ★★★★☆ | 2026-04-10 | TLS 1.3 흐름·ECDHE PFS 정착. Forward Secrecy 꼬리 질문 "모르겠습니다" → topics 보강 완료 |
 | mysql | ★★★★☆ | 2026-04-30 | 복합 인덱스 컬럼 순서 7/10 — 등치→범위 원칙·결론 정확. B-Tree 선두 범위 시 이후 컬럼 인덱스 미사용 이유 미언급. 지연 조인 "커버링 인덱스로 처리" 표현 아직 미언급. |
 | redis | ★★★★★ | 2026-05-10 | 캐싱 전략 9/10 ✅. 분산락 SET NX EX + Lua + Redlock Sentinel Failover 취약점 10/10 ✅ 복습 완성 |
@@ -46,10 +47,10 @@ updated: 2026-05-05
 | clickhouse | ★★★★☆ | 2026-05-05 | ReplacingMergeTree 9/10 ✅(5회차 재출제). FINAL=쿼리 시점 강제 병합·단일 스레드, AggregatingMergeTree, event_id 멱등성 패턴 완성. eventual consistency 표현 추가 연습 필요 |
 | mysql | ★★★★★ | 2026-05-05 | EXPLAIN type/key/rows/Extra 9/10 ✅. type 세부 단계(range/eq_ref/const) 추가 암기 필요 |
 | java/spring-batch | ★★★★☆ | 2026-05-02 | faultTolerant skip/retry 코드 패턴 9/10 ✅. skip=영구오류/retry=일시오류 케이스 구분 완성. "재처리 범위가 커진다" 표현 추가 연습 필요. |
-| kotlin | ★★★★☆ | 2026-04-02 | IO 스레드 수 수치 교정(max(64,cores)), Unconfined 동작 보완, "이벤트 루프" 표현 지양 |
+| kotlin | ★★☆☆☆ | 2026-05-13 | 왓챠 세션 0/10 — suspend/Continuation, Dispatcher(IO/Default), 구조화된 동시성 전면 학습 필요 |
 | kubernetes | ★★★★☆ | 2026-05-03 | readiness/liveness/startupProbe 구분 완성 ✅(NotReady vs 재시작 vs CrashLoopBackOff). HPA 8/10 — 공식 ×100 오류 교정, PDB voluntary disruption(배포 포함) 꼬리 후 교정 완료. desiredReplicas 공식 정확한 표현 추가 연습 필요. |
 | zookeeper | ★★★★★ | 2026-05-06 | Watch 1회성 + reporter 재등록 완성 ✅. 트랜스코더 Event-Driven 경험 9/10 |
-| java/async | ★★☆☆☆ | 2026-05-06 | @Async ThreadPoolTaskExecutor·CompletableFuture 체이닝(thenApply/thenCombine)·I/O vs CPU bound 이유 미암기 (2/10 → 재출제 필요) |
+| java/async | ★★☆☆☆ | 2026-05-11 | thenApply/thenCompose/thenCombine/allOf 전체 미암기. I/O vs CPU bound 스레드 풀 전략 미암기 (3/10 — 재출제 최우선) |
 | java/concurrency | ★★★★★ | 2026-05-10 | 복습 세션 10/10 ✅. synchronized/volatile/ReentrantLock tryLock/ConcurrentHashMap 모두 완성. volatile 원자성 미보장+AtomicInteger까지 정확 |
 | distributed-systems | ★★★☆☆ | 2026-04-12 | 2PC 전혀 모름 — Phase 1/2 흐름, Blocking 원인, 3PC 차이 암기 필요. Saga 선택 이유 방향은 알고 있음 |
 | elasticsearch | ★★★★☆ | 2026-04-28 | Analyzer 3단계 7/10 해결. Term Dictionary 이진탐색(O(log N)) + Posting List TF/position/offset 추가 암기 필요 |
@@ -88,7 +89,8 @@ updated: 2026-05-05
 | 인포뱅크 | 7 | 2026-04-28 세션 — @Transactional NESTED 7/10(영속성 컨텍스트 불일치 원인 추가 필요), WebSocket/STOMP 5/10(@SendTo 역할 오해), FastAPI Depends() 5/10(요청 스코프 격리 미언급), RabbitMQ DLQ 9/10 ✅ 드디어 해결 |
 | 채널톡 | 4 | 2026-04-21 불합격. archived |
 | 버즈니 | 3 | 2026-04-28 세션 — ES Analyzer 7/10, Kafka Exactly-Once 10/10 ✅, Redis pub/sub 9/10 |
-| 인라이플 | 35 | 2026-05-07 실제 면접 — 이력서 경험 기반 질문 위주(대표 프로젝트 구현, 리딩 경험, 레거시 대응). 분위기 좋음. 광고 도메인 경험 부재가 변수. 결과 대기 중. |
+| 인라이플 | 35 | 2026-05-07 실제 면접 합격 🎉 → 2026-05-11 레퍼런스 체크 진행 중. 이력서 경험 기반(대표 프로젝트·리딩·레거시 대응) 위주 면접이었고 분위기 좋았음. |
+| 왓챠 | 1 | 2026-05-13 — 비동기 파이프라인 장애관리 7/10+보너스(실무 경험 강점), JPA 영속성 컨텍스트 3/10(쓰기 지연/flush 혼동), Kotlin Coroutine 0/10(전면 학습 필요). 세션 총점 10/30 (33%) |
 | wag | 1 | Java/Spring @Transactional, 동시성, JPA — 동시성 제어 최강점, 수치 정확도 보완 필요 (**지원 완료 → archived**) |
 
 ---

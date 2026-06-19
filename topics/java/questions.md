@@ -176,6 +176,28 @@ Spring AOP가 동작하지 않는 케이스를 이해하려면 먼저 Spring AOP
 
 ---
 
+## JPA 영속성 컨텍스트 — 1차 캐시, 변경 감지, 쓰기 지연, flush vs commit, OSIV
+
+**Q. JPA 영속성 컨텍스트의 1차 캐시, 변경 감지(Dirty Checking), 쓰기 지연(Write-Behind)이 각각 어떻게 동작하는지 설명해주세요. flush가 발생하는 시점과 commit과의 차이, OSIV 비활성화 시 LazyInitializationException 원인과 해결 방법도 설명해주세요.**
+
+**난이도:** 기초
+
+**핵심 키워드:** 1차 캐시(동일성 보장), 스냅샷 비교, 쓰기 지연 SQL 저장소, flush ≠ commit, OSIV, LazyInitializationException
+
+**모범 답변 방향:**
+
+- **1차 캐시**: 엔티티 조회 시 영속성 컨텍스트에 저장, 같은 트랜잭션 내 재조회 시 DB 쿼리 없이 캐시 반환. 동일한 식별자 → 동일한 객체 참조(동일성 보장)
+- **변경 감지(Dirty Checking)**: 최초 조회 시 스냅샷 저장 → flush 시점에 현재 상태와 비교 → 변경된 필드 자동 UPDATE. 명시적 update 호출 불필요
+- **쓰기 지연(Write-Behind)**: persist/변경감지로 생성된 SQL을 쓰기 지연 저장소에 모아뒀다가 flush 시점에 일괄 전송. JDBC 배치 활용 가능. **⚠️ 지연 로딩(Lazy Loading)과 완전히 다른 개념** — 쓰기 지연은 "쓰기 쿼리를 모아서 보내는 것", 지연 로딩은 "연관 엔티티를 접근 시점에 조회하는 것"
+- **flush 발생 시점 3가지**: ① 트랜잭션 커밋 직전 ② JPQL 쿼리 실행 직전 ③ 명시적 flush() 호출
+- **flush vs commit**: flush = SQL 전송(롤백 가능), commit = 트랜잭션 확정(롤백 불가). commit 내부에서 flush 먼저 실행 후 확정
+- **OSIV**: Spring Boot 기본 활성화. ON → Controller까지 영속성 컨텍스트 유지(Lazy Loading 가능). OFF → Service 트랜잭션 종료와 함께 영속성 컨텍스트 닫힘 → Controller에서 Lazy 접근 시 LazyInitializationException. 해결: Service에서 fetch join/EntityGraph로 미리 로딩. 실무에서는 OSIV OFF 권장(DB 커넥션 풀 고갈 방지)
+
+**세션 이력:**
+- 2026-05-13 왓챠 1회차: 3/10 — 쓰기 지연을 지연 로딩으로 혼동, flush/commit 역전, OSIV 미답변
+
+---
+
 ## JPA N+1
 
 **Q. JPA에서 N+1 문제가 무엇이고 어떻게 해결하나요?**
@@ -1048,6 +1070,19 @@ Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논�
 **면접 세션 피드백 (2026-05-07 1회차)**:
 - 6/10 (이전 2/10 → 개선 ✅) — caller 스레드 해방 표현, thenApply/thenCombine 키워드 추가 연습 필요
 
+**면접 세션 피드백 (2026-05-11 1회차)**:
+- 3/10 — 반환값 유무 구분 부분 ✅, I/O vs CPU bound 이유 ❌, thenApply/thenCompose/thenCombine/allOf 전체 ❌. **핵심 암기**:
+  - I/O bound → @Async + 큰 ThreadPoolTaskExecutor (스레드 대기 많음)
+  - CPU bound → CompletableFuture + ForkJoinPool.commonPool() (코어 수 제한)
+  - thenApply = 동기 변환 (Stream.map)
+  - thenCompose = 비동기 체이닝 (Stream.flatMap), CompletableFuture<CompletableFuture<T>> 중첩 방지
+  - thenCombine = 두 Future 결과 합치기
+  - allOf = N개 모두 완료 대기, 결과는 .join()으로 개별 추출
+
+**면접 세션 피드백 (2026-05-12 1회차)**:
+- 7/10 (이전 3/10 → 개선 ✅) — I/O·CPU bound 스레드 풀 전략 ✅, thenCombine/allOf+join() ✅, thenApply/thenCompose 꼬리에서 map/flatMap 교정 ✅
+- 남은 보완: 선택 기준 첫 문장을 "스레드 풀 전략"으로 시작, thenApply "동기 변환" 키워드 명시
+
 ---
 
 ## 싱글톤 패턴 thread-safe 구현 (synchronized → DCL+volatile → enum)
@@ -1067,7 +1102,10 @@ Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논�
 **면접 세션 피드백 (2026-05-07 1회차)**:
 - 7/10 — synchronized→DCL→enum 발전 흐름 정확. volatile 메인메모리 접근 맞음. 보완: volatile의 명령어 재배열 방지 역할, enum의 직렬화·리플렉션 공격 방어 추가 필요
 
-> 출처: 2026-05-07 1회차 세션
+**면접 세션 피드백 (2026-05-11 1회차)**:
+- 6/10 — 3가지 방법 커버 ✅, synchronized 성능 문제 ✅, volatile+DCL 패턴 ✅, enum 간결성 ✅. 취약: requestCount++ 비원자 연산 메커니즘(read-modify-write 3단계) 미언급, 해결책(AtomicInteger·ThreadLocal) 미언급. **핵심 암기**: requestCount++는 비원자 연산 → race condition → AtomicInteger 또는 ThreadLocal로 해결.
+
+> 출처: 2026-05-07 1회차, 2026-05-11 1회차 세션
 
 ---
 
@@ -1131,5 +1169,48 @@ Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논�
 - synchronized/volatile/ConcurrentHashMap 핵심 구조는 정확히 설명
 - ReentrantLock 선택 기준(tryLock timeout + lockInterruptibly) 미암기 — 재출제 필요 (5/10)
 - 보완 필수: "무한 대기를 피해야 하는 경우 → ReentrantLock, 타임아웃 후 별도 처리 필요 → tryLock()" 한 문장 암기
+
+---
+
+## Virtual Thread (가상 스레드) — Java 21+
+
+### Q. Java의 Virtual Thread가 무엇이고, 기존 플랫폼 스레드와 어떻게 다른지 설명해주세요. Spring Boot에서의 적용 방법과 WebFlux 대비 장점도 포함해주세요.
+
+**난이도:** 중급
+
+**핵심 키워드:** Virtual Thread, Carrier Thread, M:N 매핑, park/unpark, [[topics/java/concepts|JVM]] 스케줄링, Spring Boot 3.2+, CPU-bound pinning, Java 25 synchronized pinning 해결
+
+**모범 답변 방향:**
+
+Virtual Thread는 Java 21에서 정식 도입된 JVM 관리 경량 스레드입니다. 기존 플랫폼 스레드는 OS 스레드와 1:1로 매핑되어 생성 비용이 높고(~1MB 스택) 수천 개 이상 생성하기 어렵습니다. 반면 Virtual Thread는 JVM이 관리하는 경량 스레드로, 소수의 Carrier Thread(플랫폼 스레드) 위에 M:N 매핑으로 스케줄링됩니다. 수십만 개를 생성해도 메모리 부담이 적습니다.
+
+핵심 동작 원리는 park/unpark 메커니즘입니다. Virtual Thread가 I/O 블로킹(DB 쿼리, HTTP 호출 등)을 만나면 Carrier Thread에서 unmount(분리)되고, Carrier Thread는 즉시 다른 Virtual Thread를 mount해서 실행합니다. I/O가 완료되면 Virtual Thread가 다시 사용 가능한 Carrier Thread에 mount되어 실행을 재개합니다. 이 과정이 JVM 레벨에서 자동으로 이루어지므로 개발자는 동기식 코드를 그대로 작성하면서 비동기 수준의 동시성을 얻습니다.
+
+**Spring Boot 적용:** Spring Boot 3.2+에서는 `spring.threads.virtual.enabled=true` 설정 한 줄로 Tomcat의 요청 처리 스레드를 Virtual Thread로 전환할 수 있습니다.
+
+**vs [[topics/system-design/questions#Spring WebFlux vs Spring MVC|WebFlux]]:** WebFlux는 Mono/Flux와 리액티브 연산자로 비동기 파이프라인을 구성해야 하므로 학습 곡선이 높고 디버깅이 어렵습니다. Virtual Thread는 동기식 코드 스타일(순차적 코드)을 유지하면서 동일한 non-blocking 동시성을 달성합니다. 콜백/Flux 체이닝 없이 기존 Spring MVC + JPA 코드를 그대로 활용할 수 있다는 것이 핵심 장점입니다.
+
+**vs @Async:** `@Async`는 별도 스레드 풀(ThreadPoolTaskExecutor)에서 실행되므로 풀 크기가 동시 처리량의 상한이 됩니다. Virtual Thread는 풀 크기 제한 없이 필요한 만큼 생성되므로 스레드 풀 고갈 문제가 원천적으로 해소됩니다.
+
+**주의사항 — CPU-bound 작업에 부적합:**
+- CPU-bound 작업(암호화, 대량 연산 등)은 I/O 대기가 없어 park가 발생하지 않음
+- Virtual Thread가 Carrier Thread를 계속 점유(pin)하므로 다른 Virtual Thread가 실행되지 못함
+- CPU-bound 작업은 기존 플랫폼 스레드 풀에서 처리하는 것이 적합
+
+**synchronized pinning 문제와 Java 25 해결:**
+- Java 21~24: `synchronized` 블록 안에서 I/O 블로킹이 발생하면 Carrier Thread에서 unmount되지 못하고 pin됨
+- 해결책: `ReentrantLock`으로 교체하면 pin 없이 정상 unmount
+- **Java 25:** synchronized 블록에서도 pinning이 발생하지 않도록 JVM 레벨에서 해결됨
+
+**꼬리 질문 예시:**
+- "Virtual Thread에서 synchronized를 사용하면 어떤 문제가 생기나요?" → Carrier Thread pinning. Java 25에서 해결.
+- "CPU-bound 작업에 Virtual Thread를 쓰면 왜 비효율적인가요?" → park가 발생하지 않아 Carrier Thread를 독점.
+- "WebFlux를 이미 쓰고 있는 서비스에서 Virtual Thread로 전환할 이유가 있나요?" → R2DBC/리액티브 파이프라인이 이미 구축됐으면 전환 비용 대비 이점 적음. 신규 프로젝트라면 Virtual Thread가 코드 복잡도 면에서 유리.
+
+**면접 세션 피드백 (2026-05-13 1회차):**
+- M:N 매핑, park/unpark unmount 메커니즘, Spring Boot 3.2+ 설정 정확
+- vs WebFlux 비교에서 "동기식 코드 스타일로 동일한 동시성" 핵심 포인트 명확
+- CPU-bound pinning 주의사항, Java 25 synchronized 해결 언급
+- 보완: @Async 대비 스레드 풀 제한 해소 포인트 추가 연습 필요
 
 ---
